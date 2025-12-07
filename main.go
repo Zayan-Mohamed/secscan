@@ -690,16 +690,6 @@ func loadRulesFromFile(path string) (map[string]string, error) {
 	return m, nil
 }
 
-func loadRules() (map[string]string, error) {
-	// prefer rules.toml in CWD if present
-	if _, err := os.Stat("rules.toml"); err == nil {
-		if m, err := loadRulesFromFile("rules.toml"); err == nil && len(m) > 0 {
-			return m, nil
-		}
-	}
-	return defaultRegexps, nil
-}
-
 func main() {
 	// Command line flags
 	root := flag.String("root", ".", "project root to scan")
