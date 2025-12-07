@@ -36,9 +36,9 @@ jobs:
 
       - name: Run secscan on itself
         run: |
-          make install-local
-          export PATH="$HOME/.local/bin:$PATH"
-          secscan -root . -history=false -verbose || true
+          go build -o secscan${{ runner.os == 'Windows' && '.exe' || '' }} main.go
+          ./secscan${{ runner.os == 'Windows' && '.exe' || '' }} -root . -history=false -verbose || true
+        shell: bash
 
   build:
     name: Build Binaries
