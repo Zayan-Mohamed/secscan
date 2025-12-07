@@ -1,0 +1,104 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  release:
+    types: [created]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ["1.19", "1.20", "1.21"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Build
+        run: go build -v main.go
+
+      - name: Test
+        run: go test -v -cover ./...
+
+      - name: Run secscan on itself
+        run: |
+          make install-local
+          export PATH="$HOME/.local/bin:$PATH"
+          secscan -root . -history=false -verbose || true
+
+  build:
+    name: Build Binaries
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Build for multiple platforms
+        run: |
+          # Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o secscan-linux-amd64 main.go
+          GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o secscan-linux-arm64 main.go
+
+          # macOS
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o secscan-darwin-amd64 main.go
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o secscan-darwin-arm64 main.go
+
+          # Windows
+          GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o secscan-windows-amd64.exe main.go
+
+      - name: Create checksums
+        run: |
+          sha256sum secscan-* > checksums.txt
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            secscan-linux-amd64
+            secscan-linux-arm64
+            secscan-darwin-amd64
+            secscan-darwin-arm64
+            secscan-windows-amd64.exe
+            checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest

@@ -1,0 +1,21 @@
+# Example SecScan Configuration File
+# Place this file as .secscan.toml in your project root
+
+# Custom detection rules
+# Format: rule_name = "regex_pattern"
+
+# Example: Custom API key format
+# custom_api = "mycompany_api_[0-9a-zA-Z]{32}"
+
+# Example: Internal tokens
+# internal_token = "int_tok_[A-Za-z0-9]{40}"
+
+# Example: Custom database credentials pattern
+# custom_db = "(?i)db_password\\s*=\\s*['\"]([^'\"]{8,})['\"]"
+
+# You can also override default patterns by using the same name
+# For example, to make AWS key detection more strict:
+# aws_access_key = "AKIA[0-9A-Z]{16}\\s*[^a-zA-Z0-9]"
+
+# Note: Patterns are compiled as regular expressions
+# Use proper regex escaping (e.g., \\s for whitespace)
