@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Go Version](https://img.shields.io/badge/go-%3E%3D1.19-00ADD8.svg)
 
@@ -26,6 +26,7 @@
 - 🔧 **Configurable** - Custom rules via TOML configuration
 - ⚡ **Fast** - Written in Go for maximum performance
 - 📄 **JSON Export** - Machine-readable output for CI/CD integration
+- 🙈 **Gitignore Support** - Automatically respects `.gitignore` patterns to skip irrelevant files
 
 ## 📦 Installation
 
@@ -92,6 +93,12 @@ secscan -root /path/to/project
 # Scan without git history (faster)
 secscan -history=false
 
+# Respect .gitignore files (default behavior)
+secscan -respect-gitignore=true
+
+# Disable gitignore (scan all files including ignored ones)
+secscan -respect-gitignore=false
+
 # Adjust entropy threshold (higher = fewer false positives)
 secscan -entropy 6.0
 
@@ -139,6 +146,45 @@ Use it:
 ```bash
 secscan -config .secscan.toml
 ```
+
+### Gitignore Support
+
+**SecScan automatically respects `.gitignore` files** in your repository, helping to:
+
+- ✅ Skip build artifacts, dependencies, and generated files
+- ✅ Reduce false positives from vendor code
+- ✅ Speed up scans by skipping irrelevant files
+- ✅ Work seamlessly with your existing Git workflow
+
+**How it works:**
+
+- Automatically finds and loads all `.gitignore` files in the repository
+- Supports nested `.gitignore` files in subdirectories
+- Handles negation patterns (`!important.txt`)
+- Supports directory-only patterns (`logs/`)
+- Compatible with standard gitignore glob patterns
+
+**Examples:**
+
+```bash
+# Default: gitignore is enabled
+secscan -root .
+
+# Explicitly enable gitignore (same as default)
+secscan -respect-gitignore=true
+
+# Disable gitignore to scan ALL files (useful for security audits)
+secscan -respect-gitignore=false
+
+# Verbose mode shows which files are being skipped
+secscan -verbose -respect-gitignore=true
+```
+
+**When to disable gitignore:**
+
+- Security audits where you need to scan everything
+- Checking if secrets exist in build artifacts
+- Debugging scan results
 
 ### Entropy Threshold
 
@@ -355,7 +401,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## 🙏 Acknowledgments
 

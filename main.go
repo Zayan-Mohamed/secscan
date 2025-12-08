@@ -1,5 +1,5 @@
 // secscan - Enhanced Go CLI secret scanner
-// Version: 2.0.0
+// Version: 2.1.0
 // Author: Zayan-Mohamed (itsm.zayan@gmail.com)
 // License: MIT
 //
@@ -15,6 +15,7 @@
 //	secscan -root . -config .secscan.toml  # use custom config
 //	secscan -root . -entropy 5.5         # adjust entropy threshold
 //	secscan -root . -verbose             # show detailed output
+//	secscan -root . -respect-gitignore=false  # disable gitignore support
 package main
 
 import (
@@ -54,14 +55,24 @@ type Finding struct {
 
 // Config holds scanner configuration
 type Config struct {
-	Rules            map[string]*Rule
-	SkipDirs         []string
-	SkipFiles        []string
-	AllowPatterns    []*regexp.Regexp
-	EntropyThreshold float64
-	MinSecretLength  int
-	MaxSecretLength  int
-	Verbose          bool
+	Rules             map[string]*Rule
+	SkipDirs          []string
+	SkipFiles         []string
+	AllowPatterns     []*regexp.Regexp
+	EntropyThreshold  float64
+	MinSecretLength   int
+	MaxSecretLength   int
+	Verbose           bool
+	RespectGitignore  bool
+	GitignorePatterns []GitignorePattern
+}
+
+// GitignorePattern represents a pattern from .gitignore with its base directory
+type GitignorePattern struct {
+	Pattern   string
+	Negation  bool
+	Directory bool
+	BaseDir   string
 }
 
 // Rule represents a detection rule
@@ -188,6 +199,174 @@ func shouldSkipFile(name string) bool {
 	}
 
 	return false
+}
+
+// parseGitignoreLine parses a single line from .gitignore
+func parseGitignoreLine(line, baseDir string) *GitignorePattern {
+	line = strings.TrimSpace(line)
+
+	// Skip empty lines and comments
+	if line == "" || strings.HasPrefix(line, "#") {
+		return nil
+	}
+
+	pattern := GitignorePattern{
+		BaseDir: baseDir,
+	}
+
+	// Check for negation
+	if strings.HasPrefix(line, "!") {
+		pattern.Negation = true
+		line = strings.TrimPrefix(line, "!")
+	}
+
+	// Check if pattern is for directories only
+	if strings.HasSuffix(line, "/") {
+		pattern.Directory = true
+		line = strings.TrimSuffix(line, "/")
+	}
+
+	pattern.Pattern = line
+	return &pattern
+}
+
+// loadGitignore loads patterns from a .gitignore file
+func loadGitignore(path string) ([]GitignorePattern, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	baseDir := filepath.Dir(path)
+	var patterns []GitignorePattern
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		if pattern := parseGitignoreLine(scanner.Text(), baseDir); pattern != nil {
+			patterns = append(patterns, *pattern)
+		}
+	}
+
+	return patterns, scanner.Err()
+}
+
+// collectGitignorePatterns finds and loads all .gitignore files in the repository
+func collectGitignorePatterns(root string) []GitignorePattern {
+	var allPatterns []GitignorePattern
+
+	// Walk the directory tree to find all .gitignore files
+	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		// Skip .git directory
+		if d.IsDir() && d.Name() == ".git" {
+			return filepath.SkipDir
+		}
+
+		// Check if this is a .gitignore file
+		if !d.IsDir() && d.Name() == ".gitignore" {
+			patterns, err := loadGitignore(path)
+			if err == nil {
+				allPatterns = append(allPatterns, patterns...)
+			}
+		}
+
+		return nil
+	})
+
+	return allPatterns
+}
+
+// matchGitignorePattern checks if a path matches a gitignore pattern
+func matchGitignorePattern(path string, pattern GitignorePattern) bool {
+	// Convert absolute path to relative path from pattern's base directory
+	relPath, err := filepath.Rel(pattern.BaseDir, path)
+	if err != nil {
+		return false
+	}
+
+	// If the path is outside the base directory, it doesn't match
+	if strings.HasPrefix(relPath, "..") {
+		return false
+	}
+
+	patternStr := pattern.Pattern
+
+	// Handle different pattern types
+	if strings.HasPrefix(patternStr, "/") {
+		// Anchored to base directory
+		patternStr = strings.TrimPrefix(patternStr, "/")
+		return matchPattern(patternStr, relPath)
+	} else if strings.Contains(patternStr, "/") {
+		// Contains slash - match anywhere in path
+		return matchPattern(patternStr, relPath)
+	} else {
+		// No slash - match basename anywhere in tree
+		parts := strings.Split(relPath, string(filepath.Separator))
+		for _, part := range parts {
+			if matchPattern(patternStr, part) {
+				return true
+			}
+		}
+		// Also try full relative path
+		return matchPattern(patternStr, relPath)
+	}
+}
+
+// matchPattern performs glob-style pattern matching
+func matchPattern(pattern, name string) bool {
+	// Handle ** for matching any number of directories
+	if strings.Contains(pattern, "**") {
+		parts := strings.Split(pattern, "**")
+		if len(parts) == 2 {
+			prefix := strings.TrimSuffix(parts[0], "/")
+			suffix := strings.TrimPrefix(parts[1], "/")
+
+			if prefix != "" && !strings.HasPrefix(name, prefix) {
+				return false
+			}
+			if suffix != "" && !strings.HasSuffix(name, suffix) {
+				return false
+			}
+			return true
+		}
+	}
+
+	// Simple glob matching
+	matched, _ := filepath.Match(pattern, name)
+	if matched {
+		return true
+	}
+
+	// Try matching with the full path for patterns with directory separators
+	matched, _ = filepath.Match(pattern, filepath.Base(name))
+	return matched
+}
+
+// isGitignored checks if a path should be ignored based on gitignore patterns
+func isGitignored(path string, patterns []GitignorePattern, isDir bool) bool {
+	ignored := false
+
+	// Process patterns in order (later patterns override earlier ones)
+	for _, pattern := range patterns {
+		// Skip directory-only patterns for files
+		if pattern.Directory && !isDir {
+			continue
+		}
+
+		if matchGitignorePattern(path, pattern) {
+			if pattern.Negation {
+				ignored = false // Negation pattern - don't ignore
+			} else {
+				ignored = true // Normal pattern - ignore
+			}
+		}
+	}
+
+	return ignored
 }
 
 func looksLikeTextFile(name string) bool {
@@ -352,18 +531,36 @@ func shannonEntropy(s string) float64 {
 	return e
 }
 
-func walkFiles(root string, action func(path string) error) error {
+func walkFiles(root string, config *Config, action func(path string) error) error {
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// ignore walk errors for robustness
 			return nil
 		}
 		if d.IsDir() {
+			// Check gitignore first if enabled
+			if config.RespectGitignore && isGitignored(path, config.GitignorePatterns, true) {
+				if config.Verbose {
+					fmt.Printf("Skipping gitignored directory: %s\n", path)
+				}
+				return filepath.SkipDir
+			}
+
+			// Then check default skip dirs
 			if shouldSkipDir(path) && path != root {
 				return filepath.SkipDir
 			}
 			return nil
 		}
+
+		// Check gitignore for files if enabled
+		if config.RespectGitignore && isGitignored(path, config.GitignorePatterns, false) {
+			if config.Verbose {
+				fmt.Printf("Skipping gitignored file: %s\n", path)
+			}
+			return nil
+		}
+
 		if !looksLikeTextFile(path) {
 			return nil
 		}
@@ -701,11 +898,12 @@ func main() {
 	entropyThreshold := flag.Float64("entropy", 5.0, "entropy threshold for detection (default 5.0)")
 	noEntropy := flag.Bool("no-entropy", false, "disable entropy-based detection")
 	version := flag.Bool("version", false, "show version information")
+	respectGitignore := flag.Bool("respect-gitignore", true, "respect .gitignore files when scanning (default: true)")
 
 	flag.Parse()
 
 	if *version {
-		fmt.Println("secscan version 2.0.0")
+		fmt.Println("secscan version 2.1.0")
 		fmt.Println("Enhanced secret scanner for source code")
 		os.Exit(0)
 	}
@@ -744,14 +942,25 @@ func main() {
 		os.Exit(2)
 	}
 
+	// Load gitignore patterns if enabled
+	var gitignorePatterns []GitignorePattern
+	if *respectGitignore {
+		gitignorePatterns = collectGitignorePatterns(*root)
+		if !*quiet && len(gitignorePatterns) > 0 {
+			fmt.Printf("Loaded %d .gitignore patterns\n", len(gitignorePatterns))
+		}
+	}
+
 	// Create config
 	config := &Config{
-		Rules:            compiled,
-		AllowPatterns:    allowPatterns,
-		EntropyThreshold: *entropyThreshold,
-		MinSecretLength:  8,
-		MaxSecretLength:  512,
-		Verbose:          *verbose,
+		Rules:             compiled,
+		AllowPatterns:     allowPatterns,
+		EntropyThreshold:  *entropyThreshold,
+		MinSecretLength:   8,
+		MaxSecretLength:   512,
+		Verbose:           *verbose,
+		RespectGitignore:  *respectGitignore,
+		GitignorePatterns: gitignorePatterns,
 	}
 
 	if *noEntropy {
@@ -759,10 +968,15 @@ func main() {
 	}
 
 	if !*quiet {
-		fmt.Println("SecScan v2.0.0 - Enhanced Secret Scanner")
+		fmt.Println("SecScan v2.1.0 - Enhanced Secret Scanner")
 		fmt.Printf("Scanning: %s\n", *root)
 		fmt.Printf("Entropy threshold: %.1f\n", config.EntropyThreshold)
 		fmt.Printf("Rules loaded: %d\n", len(compiled))
+		if *respectGitignore {
+			fmt.Printf("Gitignore: enabled (%d patterns loaded)\n", len(gitignorePatterns))
+		} else {
+			fmt.Println("Gitignore: disabled")
+		}
 		if *history {
 			fmt.Println("Git history: enabled")
 		}
@@ -772,7 +986,7 @@ func main() {
 	var allFindings []Finding
 
 	// Scan files
-	_ = walkFiles(*root, func(path string) error {
+	_ = walkFiles(*root, config, func(path string) error {
 		fnds, err := scanFileForSecrets(path, compiled, config)
 		if err != nil {
 			// ignore read errors on a file
@@ -813,7 +1027,7 @@ func main() {
 				"findings_unique":  stats.FindingsUnique,
 				"scan_duration_ms": stats.EndTime.Sub(stats.StartTime).Milliseconds(),
 			},
-			"version": "2.0.0",
+			"version": "2.1.0",
 		}
 		b, _ := json.MarshalIndent(output, "", "  ")
 		_ = os.WriteFile(*jsonOut, b, 0644)

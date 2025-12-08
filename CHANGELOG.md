@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [2.1.0] - 2025-12-08
+
+### Added
+
+- 🙈 **Gitignore Support**: Automatically respects `.gitignore` files when scanning
+  - Finds and loads all `.gitignore` files in the repository hierarchy
+  - Supports nested `.gitignore` files in subdirectories
+  - Handles negation patterns (`!important.txt`)
+  - Supports directory-only patterns (`logs/`)
+  - Compatible with standard gitignore glob patterns including `**` wildcards
+  - Reduces false positives from build artifacts and vendor code
+  - Speeds up scans by skipping irrelevant files
+- 🎚️ **Gitignore Control Flag**: New `-respect-gitignore` flag (default: `true`)
+  - Enable/disable gitignore handling as needed
+  - Useful for security audits where scanning all files is required
+  - Shows number of loaded patterns in verbose output
+
+### Changed
+
+- **File Walking**: Modified to check gitignore patterns before scanning files and directories
+- **Output**: Added gitignore status to scan initialization output
+- **Performance**: Faster scans by skipping gitignored directories early in the walk process
+
+### Fixed
+
+- Binary files and build artifacts now properly excluded by default
+- Reduced false positives from scanning compiled binaries when gitignore is present
+
 ## [2.0.0] - 2025-12-08
 
 ### Added

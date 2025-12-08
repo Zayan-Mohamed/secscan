@@ -1,0 +1,38 @@
+feat: Add gitignore support for intelligent file filtering
+
+This release introduces automatic .gitignore file support, significantly
+improving scan accuracy and performance by filtering out irrelevant files.
+
+Key Features:
+- Automatically finds and loads all .gitignore files in the repository
+- Supports nested .gitignore files in subdirectories
+- Handles negation patterns (!important.txt)
+- Supports directory-only patterns (logs/)
+- Compatible with standard gitignore glob patterns including **
+- Reduces false positives from build artifacts and vendor code
+- Speeds up scans by skipping irrelevant files early
+
+New Flag:
+- `-respect-gitignore` (default: true) - Enable/disable gitignore handling
+
+Technical Details:
+- Added GitignorePattern struct to represent patterns with metadata
+- Implemented parseGitignoreLine() for parsing gitignore syntax
+- Implemented loadGitignore() for loading patterns from files
+- Implemented collectGitignorePatterns() for recursive discovery
+- Implemented matchGitignorePattern() for path matching
+- Implemented matchPattern() for glob-style pattern matching
+- Implemented isGitignored() for checking if path should be ignored
+- Modified walkFiles() to respect gitignore patterns
+- Updated Config struct with RespectGitignore and GitignorePatterns fields
+- Added gitignore status to scan initialization output
+
+Important Behavior:
+- Working tree scans respect .gitignore (skip ignored files)
+- Git history scans do NOT respect .gitignore (scan all commits)
+- This ensures secrets committed before gitignore are still detected
+
+Breaking Changes: None
+Backward Compatibility: Fully maintained
+
+Version: 2.1.0
