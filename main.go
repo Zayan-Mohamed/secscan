@@ -256,7 +256,7 @@ func collectGitignorePatterns(root string) []GitignorePattern {
 	var allPatterns []GitignorePattern
 
 	// Walk the directory tree to find all .gitignore files
-	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
