@@ -40,16 +40,34 @@ case $choice in
     1)
         echo ""
         echo "Installing to /usr/local/bin (requires sudo)..."
+        
+        # Check for existing installation in ~/.local/bin
+        if [ -f ~/.local/bin/${BINARY_NAME} ]; then
+            echo "Warning: ${BINARY_NAME} found in ~/.local/bin"
+            echo "   Removing old version from ~/.local/bin..."
+            rm -f ~/.local/bin/${BINARY_NAME}
+        fi
+        
         sudo cp "${BUILD_DIR}/${BINARY_NAME}" /usr/local/bin/
         sudo chmod +x /usr/local/bin/${BINARY_NAME}
         echo "Installed successfully to /usr/local/bin/${BINARY_NAME}"
         echo ""
         echo "Verify installation:"
         echo "  ${BINARY_NAME} -version"
+        echo "  which ${BINARY_NAME}"
         ;;
     2)
         echo ""
         echo "Installing to ~/.local/bin..."
+        
+        # Check for existing installation in /usr/local/bin
+        if [ -f /usr/local/bin/${BINARY_NAME} ]; then
+            echo "Warning: ${BINARY_NAME} found in /usr/local/bin"
+            echo "   You may want to remove it with: sudo rm /usr/local/bin/${BINARY_NAME}"
+            echo "   Continuing with local installation..."
+            echo ""
+        fi
+        
         mkdir -p ~/.local/bin
         cp "${BUILD_DIR}/${BINARY_NAME}" ~/.local/bin/
         chmod +x ~/.local/bin/${BINARY_NAME}

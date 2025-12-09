@@ -81,9 +81,14 @@ clean:
 ## install: Install to system (requires sudo) - RECOMMENDED
 install: build
 	@echo "Installing $(BINARY_NAME) to $(INSTALL_PATH)..."
+	@if [ -f ~/.local/bin/$(BINARY_NAME) ]; then \
+		echo "Warning: $(BINARY_NAME) already exists in ~/.local/bin"; \
+		echo "   Removing old version from ~/.local/bin..."; \
+		rm -f ~/.local/bin/$(BINARY_NAME); \
+	fi
 	@sudo cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_PATH)/
 	@sudo chmod +x $(INSTALL_PATH)/$(BINARY_NAME)
-	@echo "Installed successfully to $(INSTALL_PATH)/$(BINARY_NAME)"
+	@echo "✓ Installed successfully to $(INSTALL_PATH)/$(BINARY_NAME)"
 	@echo ""
 	@echo "Verify installation:"
 	@echo "  $(BINARY_NAME) -version"
@@ -92,10 +97,16 @@ install: build
 ## install-local: Install to ~/.local/bin (no sudo required)
 install-local: build
 	@echo "Installing $(BINARY_NAME) to ~/.local/bin..."
+	@if [ -f $(INSTALL_PATH)/$(BINARY_NAME) ]; then \
+		echo "Warning: $(BINARY_NAME) already exists in $(INSTALL_PATH)"; \
+		echo "   You may want to run 'sudo make uninstall' first"; \
+		echo "   Continuing with local installation..."; \
+		echo ""; \
+	fi
 	@mkdir -p ~/.local/bin
 	@cp $(BUILD_DIR)/$(BINARY_NAME) ~/.local/bin/
 	@chmod +x ~/.local/bin/$(BINARY_NAME)
-	@echo "Installed successfully to ~/.local/bin/$(BINARY_NAME)"
+	@echo "✓ Installed successfully to ~/.local/bin/$(BINARY_NAME)"
 	@echo ""
 	@if echo $$PATH | grep -q "$$HOME/.local/bin"; then \
 		echo "~/.local/bin is already in your PATH"; \
@@ -111,8 +122,19 @@ install-local: build
 ## uninstall: Remove from system (requires sudo)
 uninstall:
 	@echo "Uninstalling $(BINARY_NAME)..."
-	@sudo rm -f $(INSTALL_PATH)/$(BINARY_NAME)
-	@echo "Uninstalled successfully"
+	@if [ -f $(INSTALL_PATH)/$(BINARY_NAME) ]; then \
+		sudo rm -f $(INSTALL_PATH)/$(BINARY_NAME); \
+		echo "✓ Removed $(INSTALL_PATH)/$(BINARY_NAME)"; \
+	else \
+		echo "  $(BINARY_NAME) not found in $(INSTALL_PATH)"; \
+	fi
+	@if [ -f ~/.local/bin/$(BINARY_NAME) ]; then \
+		rm -f ~/.local/bin/$(BINARY_NAME); \
+		echo "✓ Removed ~/.local/bin/$(BINARY_NAME)"; \
+	else \
+		echo "  $(BINARY_NAME) not found in ~/.local/bin"; \
+	fi
+	@echo "Uninstall complete"
 
 ## run: Build and run with default options
 run: build
