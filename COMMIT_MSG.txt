@@ -1,38 +1,37 @@
-feat: Add gitignore support for intelligent file filtering
+docs: Add comprehensive MkDocs documentation site
 
-This release introduces automatic .gitignore file support, significantly
-improving scan accuracy and performance by filtering out irrelevant files.
+This commit introduces a complete documentation system using MkDocs with
+Material theme for the SecScan project.
+
+Documentation Structure:
+- Getting Started guides (Quick Start, Installation, First Scan)
+- User Guide (Basic Usage, Configuration, CI/CD Integration, Examples)
+- Reference documentation (CLI Options)
+- Deployment guides and setup scripts
 
 Key Features:
-- Automatically finds and loads all .gitignore files in the repository
-- Supports nested .gitignore files in subdirectories
-- Handles negation patterns (!important.txt)
-- Supports directory-only patterns (logs/)
-- Compatible with standard gitignore glob patterns including **
-- Reduces false positives from build artifacts and vendor code
-- Speeds up scans by skipping irrelevant files early
+- Professional Material theme with dark/light mode support
+- Fast, searchable documentation with built-in search
+- Mobile-responsive design
+- Code syntax highlighting with copy buttons
+- Tabbed content for platform-specific instructions
+- Admonitions for tips, warnings, and info boxes
+- Automated deployment via GitHub Actions
 
-New Flag:
-- `-respect-gitignore` (default: true) - Enable/disable gitignore handling
+New Files Added:
+- mkdocs.yml - MkDocs configuration
+- requirements-docs.txt - Python dependencies for documentation
+- setup-docs.sh - Automated setup script
+- DEPLOYMENT.md - Deployment guide for docs
+- DOCS_GUIDE.md - Documentation development guide
+- DOCUMENTATION_SUMMARY.md - Complete summary
+- .github/workflows/docs.yml - Auto-deploy workflow
+- docs/ - Complete documentation source files
 
-Technical Details:
-- Added GitignorePattern struct to represent patterns with metadata
-- Implemented parseGitignoreLine() for parsing gitignore syntax
-- Implemented loadGitignore() for loading patterns from files
-- Implemented collectGitignorePatterns() for recursive discovery
-- Implemented matchGitignorePattern() for path matching
-- Implemented matchPattern() for glob-style pattern matching
-- Implemented isGitignored() for checking if path should be ignored
-- Modified walkFiles() to respect gitignore patterns
-- Updated Config struct with RespectGitignore and GitignorePatterns fields
-- Added gitignore status to scan initialization output
-
-Important Behavior:
-- Working tree scans respect .gitignore (skip ignored files)
-- Git history scans do NOT respect .gitignore (scan all commits)
-- This ensures secrets committed before gitignore are still detected
-
-Breaking Changes: None
-Backward Compatibility: Fully maintained
+Documentation Deployment:
+- Automated deployment to GitHub Pages on push to main
+- Manual deployment: mkdocs gh-deploy
+- Local preview: mkdocs serve
+- Live at: https://zayan-mohamed.github.io/secscan/
 
 Version: 2.1.0
