@@ -1,5 +1,5 @@
 // secscan - Enhanced Go CLI secret scanner
-// Version: 2.1.0
+// Version: 2.2.0
 // Author: Zayan-Mohamed (itsm.zayan@gmail.com)
 // License: MIT
 //
@@ -193,9 +193,32 @@ func shouldSkipFile(name string) bool {
 		}
 	}
 
-	// Skip lock files
-	if strings.HasSuffix(base, ".lock") || strings.HasSuffix(base, "-lock.json") {
-		return true
+	// Skip all types of lock files comprehensively
+	lockFilePatterns := []string{
+		".lock",             // Gemfile.lock, Pipfile.lock, etc.
+		"-lock.json",        // package-lock.json
+		"-lock.yaml",        // pnpm-lock.yaml
+		"lock.json",         // composer.lock.json
+		"lock.yaml",         // yarn.lock (though it's typically yarn.lock)
+		"yarn.lock",         // yarn lock file
+		"pnpm-lock.yaml",    // pnpm lock file
+		"package-lock.json", // npm lock file
+		"composer.lock",     // PHP composer lock
+		"Gemfile.lock",      // Ruby Gemfile lock
+		"Pipfile.lock",      // Python Pipfile lock
+		"poetry.lock",       // Python poetry lock
+		"Cargo.lock",        // Rust cargo lock
+		"mix.lock",          // Elixir mix lock
+		"pubspec.lock",      // Dart/Flutter pubspec lock
+		"go.sum",            // Go dependencies checksum
+		"Podfile.lock",      // iOS CocoaPods lock
+		"Cartfile.resolved", // iOS Carthage lock
+	}
+
+	for _, pattern := range lockFilePatterns {
+		if strings.HasSuffix(base, pattern) || base == pattern {
+			return true
+		}
 	}
 
 	return false
@@ -707,9 +730,35 @@ func scanGitHistory(rules map[string]*Rule, config *Config, stats *Stats) ([]Fin
 
 		s := bufio.NewScanner(strings.NewReader(diff))
 		ln := 0
+		currentFile := ""
+		skipCurrentFile := false
+
 		for s.Scan() {
 			ln++
 			line := s.Text()
+
+			// Track which file we're currently processing in the diff
+			// Git diff format: "diff --git a/path/to/file b/path/to/file"
+			if strings.HasPrefix(line, "diff --git") {
+				// Extract filename from diff header
+				parts := strings.Fields(line)
+				if len(parts) >= 4 {
+					// The filename is in parts[2] (a/filename) or parts[3] (b/filename)
+					// We'll use parts[3] (b/filename) as it represents the new version
+					currentFile = strings.TrimPrefix(parts[3], "b/")
+					skipCurrentFile = shouldSkipFile(currentFile)
+
+					if config.Verbose && skipCurrentFile {
+						fmt.Printf("Skipping file in git history: %s (commit: %s)\n", currentFile, c[:8])
+					}
+				}
+				continue
+			}
+
+			// Skip content if we're in a file that should be skipped
+			if skipCurrentFile {
+				continue
+			}
 
 			// Only scan added or removed lines
 			if !strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "-") {
@@ -903,7 +952,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Println("secscan version 2.1.0")
+		fmt.Println("secscan version 2.2.0")
 		fmt.Println("Enhanced secret scanner for source code")
 		os.Exit(0)
 	}
@@ -1027,7 +1076,7 @@ func main() {
 				"findings_unique":  stats.FindingsUnique,
 				"scan_duration_ms": stats.EndTime.Sub(stats.StartTime).Milliseconds(),
 			},
-			"version": "2.1.0",
+			"version": "2.2.0",
 		}
 		b, _ := json.MarshalIndent(output, "", "  ")
 		_ = os.WriteFile(*jsonOut, b, 0644)

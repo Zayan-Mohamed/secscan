@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2025-12-09
+
+### Fixed
+
+- 🔒 **Git History Scanning**: Fixed critical bug where lock files (package-lock.json, pnpm-lock.yaml, yarn.lock, etc.) were still being scanned in git history
+  - Added file name extraction from git diff headers
+  - Implemented skip file check before processing diff content
+  - Now properly respects `shouldSkipFile()` function in git history scans
+- 📋 **Enhanced Skip Patterns**: Improved file skip detection with comprehensive lock file patterns
+  - Added support for Cargo.lock, Gemfile.lock, poetry.lock, composer.lock, pubspec.lock
+  - Better coverage for package manager lock files across all ecosystems
+
+### Changed
+
+- **Git Diff Processing**: Modified to track current filename from diff headers and skip content accordingly
+- **Performance**: Reduced false positives and improved scan speed by properly skipping lock files in git history
+
 ## [2.1.0] - 2025-12-08
 
 ### Added
