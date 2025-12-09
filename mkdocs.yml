@@ -1,0 +1,104 @@
+site_name: SecScan Documentation
+site_description: Fast, configurable, and intelligent secret detection for your source code
+site_author: Zayan Mohamed
+site_url: https://zayan-mohamed.github.io/secscan
+
+repo_name: Zayan-Mohamed/secscan
+repo_url: https://github.com/Zayan-Mohamed/secscan
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/shield-lock
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - tags
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quick Start: getting-started/quickstart.md
+      - Installation: getting-started/installation.md
+      - First Scan: getting-started/first-scan.md
+  - User Guide:
+      - Basic Usage: user-guide/basic-usage.md
+      - Configuration: user-guide/configuration.md
+      - Advanced Features: user-guide/advanced-features.md
+      - CI/CD Integration: user-guide/ci-cd-integration.md
+      - Examples: user-guide/examples.md
+  - Reference:
+      - Command-Line Options: reference/cli-options.md
+      - Configuration File: reference/config-file.md
+      - Detection Patterns: reference/patterns.md
+      - Output Formats: reference/output-formats.md
+  - Deployment:
+      - GitHub Actions: deployment/github-actions.md
+      - GitLab CI: deployment/gitlab-ci.md
+      - Jenkins: deployment/jenkins.md
+      - Docker: deployment/docker.md
+  - About:
+      - Changelog: about/changelog.md
+      - Release Notes: about/release-notes.md
+      - Contributing: about/contributing.md
+      - License: about/license.md
+
+extra:
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Zayan-Mohamed
+    - icon: fontawesome/solid/envelope
+      link: mailto:itsm.zayan@gmail.com
+
+copyright: Copyright &copy; 2025 Zayan Mohamed
