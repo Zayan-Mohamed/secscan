@@ -42,9 +42,9 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Go not found"
     }
-    Write-Host "✓ Go found: $goVersion" -ForegroundColor Green
+    Write-Host "[OK] Go found: $goVersion" -ForegroundColor Green
 } catch {
-    Write-Host "✗ Go is not installed or not in PATH" -ForegroundColor Red
+    Write-Host "[ERROR] Go is not installed or not in PATH" -ForegroundColor Red
     Write-Host ""
     Write-Host "Please install Go 1.19 or later from: https://go.dev/doc/install" -ForegroundColor Yellow
     Write-Host ""
@@ -72,9 +72,9 @@ try {
         throw "Build failed"
     }
     
-    Write-Host "✓ Build complete: $BUILD_DIR\$BINARY_NAME" -ForegroundColor Green
+    Write-Host "[OK] Build complete: $BUILD_DIR\$BINARY_NAME" -ForegroundColor Green
 } catch {
-    Write-Host "✗ Build failed: $_" -ForegroundColor Red
+    Write-Host "[ERROR] Build failed: $_" -ForegroundColor Red
     exit 1
 }
 
@@ -86,7 +86,7 @@ if ($Global) {
     $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     
     if (-not $isAdmin) {
-        Write-Host "✗ Global installation requires administrator privileges" -ForegroundColor Red
+        Write-Host "[ERROR] Global installation requires administrator privileges" -ForegroundColor Red
         Write-Host ""
         Write-Host "Please run PowerShell as Administrator, or install locally without -Global flag" -ForegroundColor Yellow
         Write-Host ""
@@ -108,9 +108,9 @@ if (-not (Test-Path $InstallPath)) {
 # Copy binary to installation path
 try {
     Copy-Item "$BUILD_DIR\$BINARY_NAME" "$InstallPath\$BINARY_NAME" -Force
-    Write-Host "✓ Installed successfully to: $InstallPath\$BINARY_NAME" -ForegroundColor Green
+    Write-Host "[OK] Installed successfully to: $InstallPath\$BINARY_NAME" -ForegroundColor Green
 } catch {
-    Write-Host "✗ Failed to copy binary: $_" -ForegroundColor Red
+    Write-Host "[ERROR] Failed to copy binary: $_" -ForegroundColor Red
     exit 1
 }
 
@@ -121,7 +121,7 @@ $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
 $isInPath = $currentPath -split ";" | Where-Object { $_ -eq $InstallPath }
 
 if (-not $isInPath) {
-    Write-Host "⚠ $InstallPath is not in your PATH" -ForegroundColor Yellow
+    Write-Host "WARNING: $InstallPath is not in your PATH" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Do you want to add it to your PATH? (y/n): " -ForegroundColor Cyan -NoNewline
     $response = Read-Host
@@ -138,12 +138,12 @@ if (-not $isInPath) {
                 # Update current session
                 $env:Path = "$env:Path;$InstallPath"
                 
-                Write-Host "✓ Added $InstallPath to PATH" -ForegroundColor Green
+                Write-Host "[OK] Added $InstallPath to PATH" -ForegroundColor Green
                 Write-Host ""
-                Write-Host "⚠ Please restart your terminal for PATH changes to take effect" -ForegroundColor Yellow
+                Write-Host "WARNING: Please restart your terminal for PATH changes to take effect" -ForegroundColor Yellow
             }
         } catch {
-            Write-Host "✗ Failed to update PATH: $_" -ForegroundColor Red
+            Write-Host "[ERROR] Failed to update PATH: $_" -ForegroundColor Red
             Write-Host ""
             Write-Host "You can manually add the following to your PATH:" -ForegroundColor Yellow
             Write-Host "  $InstallPath" -ForegroundColor White
@@ -159,7 +159,7 @@ if (-not $isInPath) {
         Write-Host "  $InstallPath\$BINARY_NAME" -ForegroundColor White
     }
 } else {
-    Write-Host "✓ $InstallPath is already in your PATH" -ForegroundColor Green
+    Write-Host "[OK] $InstallPath is already in your PATH" -ForegroundColor Green
 }
 
 Write-Host ""

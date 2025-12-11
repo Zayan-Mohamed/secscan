@@ -1,7 +1,8 @@
 # Welcome to SecScan
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0-blue.svg" alt="Version">
+
+  ![GitHub release](https://img.shields.io/github/release/Zayan-Mohamed/secscan.svg)
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/go-%3E%3D1.19-00ADD8.svg" alt="Go Version">
 </p>
