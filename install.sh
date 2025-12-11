@@ -4,7 +4,7 @@
 
 set -e
 
-VERSION="2.2.1"
+VERSION="2.2.2"
 BINARY_NAME="secscan"
 BUILD_DIR="build"
 

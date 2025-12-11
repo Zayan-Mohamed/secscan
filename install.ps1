@@ -11,7 +11,7 @@ param(
     [switch]$Help = $false
 )
 
-$VERSION = "2.2.1"
+$VERSION = "2.2.2"
 $BINARY_NAME = "secscan.exe"
 $BUILD_DIR = "build"
 

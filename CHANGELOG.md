@@ -2,6 +2,19 @@
 
 All notable changes to SecScan will be documented in this file.
 
+## [2.2.2] - 2025-12-12
+
+### Added
+- 
+
+### Changed
+- 
+
+### Fixed
+- 
+
+All notable changes to SecScan will be documented in this file.
+
 ## [2.2.1] - 2025-12-11
 
 ### Added

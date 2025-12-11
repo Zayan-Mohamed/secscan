@@ -1,5 +1,5 @@
 // secscan - Enhanced Go CLI secret scanner
-// Version: 2.2.1
+// Version: 2.2.2
 // Author: Zayan-Mohamed (itsm.zayan@gmail.com)
 // License: MIT
 //
@@ -40,7 +40,7 @@ import (
 )
 
 // Version information
-const version = "2.2.1"
+const version = "2.2.2"
 
 // Finding represents a detected secret or potential secret
 type Finding struct {
