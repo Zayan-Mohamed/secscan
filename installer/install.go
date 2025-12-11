@@ -1,15 +1,15 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
+        "fmt"
+        "os"
+        "os/exec"
+        "path/filepath"
+        "runtime"
+        "strings"
 )
 
-const VERSION = "2.2.0"
+const version = "2.2.1"
 
 var (
 	binaryName   = "secscan"
@@ -23,7 +23,7 @@ var (
 
 func main() {
 	fmt.Println()
-	fmt.Println("SecScan v" + VERSION + " - Universal Installation Script")
+	fmt.Println("SecScan v" + version + " - Universal Installation Script")
 	fmt.Println("=================================================")
 	fmt.Println()
 	fmt.Printf("Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
@@ -94,7 +94,7 @@ func buildBinary() (string, error) {
 	outputPath := filepath.Join(buildDir, binaryFile)
 
 	// Build command
-	ldflags := fmt.Sprintf("-X main.Version=%s -s -w", VERSION)
+	ldflags := fmt.Sprintf("-X main.Version=%s -s -w", version)
 	cmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", outputPath, "main.go")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
