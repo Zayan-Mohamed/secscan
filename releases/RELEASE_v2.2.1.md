@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/install.
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/scripts/install-windows.ps1 | iex
 ```
 
 ### Using Go

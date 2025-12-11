@@ -1,5 +1,9 @@
-# SecScan Installation Script for Windows
-# PowerShell script to build and install secscan on Windows
+# SecScan Local Installation Script for Windows
+# This script builds SecScan from source and installs it locally
+# NOTE: This script requires the source code (main.go, go.mod) to be present
+#
+# For remote installation (downloads pre-built binary), use:
+#   irm https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/scripts/install-windows.ps1 | iex
 
 param(
     [string]$InstallPath = "$env:USERPROFILE\.local\bin",

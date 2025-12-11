@@ -2,15 +2,35 @@
 
 This guide covers different methods to install SecScan on **Linux**, **macOS**, and **Windows**.
 
+---
+
+## 🚀 Remote Installation (Recommended)
+
+Download and install pre-built binaries directly from GitHub:
+
+### Linux/macOS
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/scripts/install-curl.sh | bash
+```
+
+### Windows (PowerShell)
+```powershell
+irm https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/scripts/install-windows.ps1 | iex
+```
+
+---
+
+## 📦 Local Installation (From Source)
+
+If you have cloned the repository and want to build from source:
+
 > **⚠️ Platform-Specific Notes:**
 >
 > - **Linux/macOS**: Use `install.sh` or `make` commands
 > - **Windows**: Use `install.ps1` (PowerShell) or the universal Go installer
 > - **All Platforms**: Use the universal Go installer (`go run installer/install.go`)
 
----
-
-## 📦 Quick Install by Platform
+### Quick Install by Platform
 
 ### 🐧 Linux
 
