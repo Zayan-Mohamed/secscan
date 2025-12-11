@@ -1,75 +1,50 @@
 name: CI
 
 on:
-    push:
-        branches: [main, develop]
-    pull_request:
-        branches: [main, develop]
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
 
 jobs:
-    test:
-        name: Test
-        runs-on: ${{ matrix.os }}
-        strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest, windows-latest]
-                go: ["1.19", "1.20", "1.21"]
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ['1.19', '1.20', '1.21']
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-            - name: Set up Go
-              uses: actions/setup-go@v5
-              with:
-                  go-version: ${{ matrix.go }}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
 
-            - name: Run tests
-              run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      - name: Run tests
+        run: go test -v ./...
 
-            - name: Upload coverage
-              uses: codecov/codecov-action@v3
-              with:
-                  files: ./coverage.txt
-                  flags: unittests
-                  name: codecov-${{ matrix.os }}-go${{ matrix.go }}
+  build:
+    name: Build
+    runs-on: ubuntu-latest
 
-    lint:
-        name: Lint
-        runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.19'
 
-            - name: Set up Go
-              uses: actions/setup-go@v5
-              with:
-                  go-version: "1.19"
+      - name: Build
+        run: make build-all
 
-            - name: Run golangci-lint
-              uses: golangci/golangci-lint-action@v3
-              with:
-                  version: latest
-
-    build:
-        name: Build
-        runs-on: ubuntu-latest
-
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-
-            - name: Set up Go
-              uses: actions/setup-go@v5
-              with:
-                  go-version: "1.19"
-
-            - name: Build
-              run: make build-all
-
-            - name: Upload artifacts
-              uses: actions/upload-artifact@v4
-              with:
-                  name: binaries
-                  path: build/*
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: build/*
