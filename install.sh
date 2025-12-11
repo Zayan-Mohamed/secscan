@@ -1,14 +1,30 @@
 #!/bin/bash
-# SecScan Installation Script
+# SecScan Installation Script for Linux/macOS
 # This script builds and installs secscan as a global command
 
 set -e
 
-VERSION="2.2.0"
+VERSION="2.2.1"
 BINARY_NAME="secscan"
 BUILD_DIR="build"
 
+# Detect OS
+OS="$(uname -s)"
+case "${OS}" in
+    Linux*)     PLATFORM="Linux";;
+    Darwin*)    PLATFORM="macOS";;
+    *)          
+        echo "Unsupported operating system: ${OS}"
+        echo "This script is for Linux/macOS only."
+        echo ""
+        echo "For Windows, please use: install.ps1"
+        echo "Or use the universal installer: go run installer/install.go"
+        exit 1
+        ;;
+esac
+
 echo "SecScan v${VERSION} - Installation Script"
+echo "Platform: ${PLATFORM}"
 echo ""
 
 # Check if Go is installed

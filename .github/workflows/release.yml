@@ -1,0 +1,132 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*"
+
+permissions:
+    contents: write
+    pages: write
+    id-token: write
+
+jobs:
+    build:
+        name: Build Binaries
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                include:
+                    - os: linux
+                      arch: amd64
+                    - os: linux
+                      arch: arm64
+                    - os: darwin
+                      arch: amd64
+                    - os: darwin
+                      arch: arm64
+                    - os: windows
+                      arch: amd64
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.19"
+
+            - name: Get version
+              id: version
+              run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+            - name: Build binary
+              env:
+                  GOOS: ${{ matrix.os }}
+                  GOARCH: ${{ matrix.arch }}
+              run: |
+                  if [ "${{ matrix.os }}" = "windows" ]; then
+                    go build -ldflags="-s -w" -o build/secscan-${{ matrix.os }}-${{ matrix.arch }}.exe main.go
+                  else
+                    go build -ldflags="-s -w" -o build/secscan-${{ matrix.os }}-${{ matrix.arch }} main.go
+                  fi
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: secscan-${{ matrix.os }}-${{ matrix.arch }}
+                  path: build/*
+
+    release:
+        name: Create Release
+        needs: build
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Download artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: build
+                  merge-multiple: true
+
+            - name: Get version
+              id: version
+              run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+            - name: Generate checksums
+              run: |
+                  cd build
+                  sha256sum * > SHA256SUMS
+                  cat SHA256SUMS
+
+            - name: Read release notes
+              id: release_notes
+              run: |
+                  VERSION="${{ steps.version.outputs.VERSION }}"
+                  if [ -f "releases/RELEASE_v${VERSION}.md" ]; then
+                    echo "RELEASE_NOTES_FILE=releases/RELEASE_v${VERSION}.md" >> $GITHUB_OUTPUT
+                  else
+                    echo "No release notes found for v${VERSION}"
+                    echo "RELEASE_NOTES_FILE=" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  name: SecScan v${{ steps.version.outputs.VERSION }}
+                  body_path: ${{ steps.release_notes.outputs.RELEASE_NOTES_FILE }}
+                  draft: false
+                  prerelease: false
+                  files: |
+                      build/secscan-*
+                      build/SHA256SUMS
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    deploy-docs:
+        name: Deploy Documentation
+        needs: release
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.x"
+
+            - name: Install dependencies
+              run: |
+                  pip install -r requirements-docs.txt
+
+            - name: Deploy to GitHub Pages
+              run: |
+                  git config user.name github-actions
+                  git config user.email github-actions@github.com
+                  mkdocs gh-deploy --force

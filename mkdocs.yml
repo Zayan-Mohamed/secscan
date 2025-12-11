@@ -1,4 +1,4 @@
-site_name: SecScan Documentation
+site_name: SecScan Documentation v2.2.1
 site_description: Fast, configurable, and intelligent secret detection for your source code
 site_author: Zayan Mohamed
 site_url: https://zayan-mohamed.github.io/secscan
@@ -37,7 +37,7 @@ theme:
     - content.code.annotate
   icon:
     repo: fontawesome/brands/github
-    logo: material/shield-lock
+  logo: material/shield-lock
 
 markdown_extensions:
   - admonition
@@ -54,9 +54,6 @@ markdown_extensions:
   - tables
   - attr_list
   - md_in_html
-  - pymdownx.emoji:
-      emoji_index: materialx.emoji.twemoji
-      emoji_generator: materialx.emoji.to_svg
   - toc:
       permalink: true
 
@@ -73,24 +70,13 @@ nav:
   - User Guide:
       - Basic Usage: user-guide/basic-usage.md
       - Configuration: user-guide/configuration.md
-      - Advanced Features: user-guide/advanced-features.md
       - CI/CD Integration: user-guide/ci-cd-integration.md
       - Examples: user-guide/examples.md
   - Reference:
-      - Command-Line Options: reference/cli-options.md
-      - Configuration File: reference/config-file.md
-      - Detection Patterns: reference/patterns.md
-      - Output Formats: reference/output-formats.md
-  - Deployment:
-      - GitHub Actions: deployment/github-actions.md
-      - GitLab CI: deployment/gitlab-ci.md
-      - Jenkins: deployment/jenkins.md
-      - Docker: deployment/docker.md
-  - About:
-      - Changelog: about/changelog.md
-      - Release Notes: about/release-notes.md
-      - Contributing: about/contributing.md
-      - License: about/license.md
+      - CLI Options: reference/cli-options.md
+  - Development:
+      - Project Structure: project-structure.md
+      - Release Guide: release-guide.md
 
 extra:
   version:

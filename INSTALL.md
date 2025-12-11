@@ -1,12 +1,120 @@
 # Installation Guide
 
-This guide covers different methods to install SecScan as a proper command on your system.
+This guide covers different methods to install SecScan on **Linux**, **macOS**, and **Windows**.
 
-## Quick Install (Recommended)
+> **⚠️ Platform-Specific Notes:**
+>
+> - **Linux/macOS**: Use `install.sh` or `make` commands
+> - **Windows**: Use `install.ps1` (PowerShell) or the universal Go installer
+> - **All Platforms**: Use the universal Go installer (`go run installer/install.go`)
 
-### Method 1: Using the Installation Script
+---
 
-The easiest way to install:
+## 📦 Quick Install by Platform
+
+### 🐧 Linux
+
+**Recommended Method:**
+
+```bash
+cd secscan
+./install.sh
+```
+
+Or using Make:
+
+```bash
+cd secscan
+make install        # System-wide (requires sudo)
+# OR
+make install-local  # User-only (no sudo)
+```
+
+---
+
+### 🍎 macOS
+
+**Recommended Method:**
+
+```bash
+cd secscan
+./install.sh
+```
+
+Or using Make:
+
+```bash
+cd secscan
+make install        # System-wide (requires sudo)
+# OR
+make install-local  # User-only (no sudo)
+```
+
+**Note:** On macOS, you might need to allow the binary in System Preferences → Security & Privacy if prompted.
+
+---
+
+### 🪟 Windows
+
+**Method 1: PowerShell Script (Recommended)**
+
+Open PowerShell (as Administrator for system-wide install) and run:
+
+```powershell
+cd secscan
+.\install.ps1
+```
+
+**For system-wide installation:**
+
+```powershell
+.\install.ps1 -Global
+```
+
+**For custom installation path:**
+
+```powershell
+.\install.ps1 -InstallPath "C:\your\custom\path"
+```
+
+**Method 2: Manual Build**
+
+```powershell
+# Build the binary
+go build -o secscan.exe main.go
+
+# Move to a directory in your PATH, for example:
+# System-wide: C:\Program Files\secscan\secscan.exe
+# User: %USERPROFILE%\.local\bin\secscan.exe
+```
+
+**Note:** Windows doesn't come with `make` by default. Use PowerShell script or manual build instead.
+
+---
+
+### 🌍 Universal Installer (All Platforms)
+
+The universal Go-based installer works on **Linux**, **macOS**, and **Windows**:
+
+```bash
+cd secscan
+go run installer/install.go
+```
+
+This installer will:
+
+1. Auto-detect your platform
+2. Build the appropriate binary
+3. Offer installation options specific to your OS
+4. Guide you through PATH configuration
+
+---
+
+## 📝 Detailed Installation Methods
+
+### Method 1: Installation Scripts
+
+#### Linux/macOS: `install.sh`
 
 ```bash
 cd secscan
@@ -18,8 +126,26 @@ The script will:
 1. Build the binary
 2. Ask you to choose between system-wide or local installation
 3. Set up everything automatically
+4. Verify your PATH configuration
 
-### Method 2: Using Make (System-wide)
+#### Windows: `install.ps1`
+
+```powershell
+cd secscan
+.\install.ps1
+```
+
+Options:
+
+- Default: Installs to `%USERPROFILE%\.local\bin`
+- `-Global`: Installs to `C:\Program Files\secscan` (requires admin)
+- `-InstallPath PATH`: Custom installation directory
+
+### Method 2: Using Make (Linux/macOS Only)
+
+> **⚠️ Windows Note:** `make` is not standard on Windows. Use `install.ps1` instead.
+
+**System-wide Installation:**
 
 Install globally to `/usr/local/bin` (requires sudo):
 
@@ -35,7 +161,7 @@ secscan -version
 which secscan
 ```
 
-### Method 3: Using Make (Local - No sudo)
+**Local Installation:**
 
 Install to `~/.local/bin` without sudo:
 
@@ -56,26 +182,28 @@ Then reload your shell:
 source ~/.bashrc  # or ~/.zshrc for zsh users
 ```
 
-## Manual Installation
+### Method 3: Manual Installation
 
-### System-wide Installation
+#### Linux/macOS
+
+**System-wide:**
 
 ```bash
 # Build the binary
 cd secscan
-make build
+go build -o build/secscan main.go
 
 # Copy to /usr/local/bin (requires sudo)
 sudo cp build/secscan /usr/local/bin/
 sudo chmod +x /usr/local/bin/secscan
 ```
 
-### Local Installation
+**Local:**
 
 ```bash
 # Build the binary
 cd secscan
-make build
+go build -o build/secscan main.go
 
 # Copy to local bin directory
 mkdir -p ~/.local/bin
@@ -87,7 +215,29 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-## Using Go Install
+#### Windows
+
+**Using Command Prompt or PowerShell:**
+
+```powershell
+# Build the binary
+cd secscan
+go build -o build\secscan.exe main.go
+
+# Copy to a directory in your PATH
+# For example, create a local bin directory:
+mkdir %USERPROFILE%\.local\bin
+copy build\secscan.exe %USERPROFILE%\.local\bin\
+
+# Add to PATH (PowerShell as Administrator):
+$oldPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$newPath = "$oldPath;$env:USERPROFILE\.local\bin"
+[Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+
+# Restart your terminal to apply changes
+```
+
+### Method 4: Using Go Install
 
 If you have Go installed and the repository is public:
 
@@ -95,43 +245,66 @@ If you have Go installed and the repository is public:
 go install github.com/Zayan-Mohamed/secscan@latest
 ```
 
-This will install to `$GOPATH/bin` (usually `~/go/bin`).
+This will install to:
 
-Ensure `$GOPATH/bin` is in your PATH:
+- **Linux/macOS**: `$GOPATH/bin` (usually `~/go/bin`)
+- **Windows**: `%GOPATH%\bin` (usually `%USERPROFILE%\go\bin`)
+
+Ensure the Go bin directory is in your PATH:
+
+**Linux/macOS:**
 
 ```bash
 export PATH="$HOME/go/bin:$PATH"
 ```
 
-## Platform-Specific Instructions
+**Windows:**
+
+```powershell
+$env:Path += ";$env:USERPROFILE\go\bin"
+```
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
+
+---
+
+## 🔧 Platform-Specific Notes
 
 ### Linux
 
-All methods above work on Linux. Recommended: `make install`
+- **Recommended**: `./install.sh` or `make install`
+- **Paths**: `/usr/local/bin` (system) or `~/.local/bin` (user)
+- Most distributions come with `make` pre-installed
 
 ### macOS
 
-All methods above work on macOS. Recommended: `make install`
+- **Recommended**: `./install.sh` or `make install`
+- **Paths**: `/usr/local/bin` (system) or `~/.local/bin` (user)
+- **Security Note**: On first run, you may see a security prompt:
+  1. Go to System Preferences → Security & Privacy
+  2. Click "Allow Anyway" if prompted
+  3. Run `secscan` again
 
-On macOS, you might need to allow the binary to run:
+### Windows
 
-1. Run `secscan` once
-2. Go to System Preferences → Security & Privacy
-3. Click "Allow Anyway" if prompted
+- **Recommended**: `.\install.ps1` (PowerShell)
+- **Paths**:
+  - User: `%USERPROFILE%\.local\bin` (default)
+  - System: `C:\Program Files\secscan` (requires admin)
+- **Important**: Windows doesn't include `make` by default
+  - Use PowerShell script: `.\install.ps1`
+  - Or universal installer: `go run installer/install.go`
+  - Or manual build (see Method 3)
 
-### Windows (WSL)
+### Windows WSL (Windows Subsystem for Linux)
 
-Use the Linux instructions within WSL.
+If using WSL, follow the Linux instructions:
 
-### Windows (Native)
-
-Build on Windows:
-
-```powershell
-go build -o secscan.exe main.go
+```bash
+./install.sh
 ```
-
-Then move `secscan.exe` to a directory in your PATH, or add the current directory to PATH.
 
 ## Verification
 

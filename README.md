@@ -2,17 +2,43 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
+![Logo](/assets/logo.png)
+
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Go Version](https://img.shields.io/badge/go-%3E%3D1.19-00ADD8.svg)
+[![GitHub release](https://img.shields.io/github/release/Zayan-Mohamed/secscan.svg)](https://github.com/Zayan-Mohamed/secscan/releases)
 
 **Fast, configurable, and intelligent secret detection for your source code**
 
-[Quick Start](QUICKSTART.md) • [Installation Guide](INSTALL.md) • [Examples](EXAMPLES.md) • [Changelog](CHANGELOG.md)
+[Quick Start](#-quick-start) • [Documentation](https://zayan-mohamed.github.io/secscan) • [Examples](EXAMPLES.md) • [Changelog](CHANGELOG.md)
 
 </div>
 
-> 💡 **New to SecScan?** Run `./install.sh` for easy setup, or use `make install` to install globally. Then use `secscan` from anywhere!
+---
+
+## � Quick Install
+
+### Linux & macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/scripts/install-curl.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/install.ps1 | iex
+```
+
+### Using Go
+
+```bash
+go install github.com/Zayan-Mohamed/secscan@latest
+```
+
+> 💡 **More installation options**: [See Installation Guide](INSTALL.md)
+
+---
 
 ## 🚀 Features
 
@@ -27,51 +53,49 @@
 - ⚡ **Fast** - Written in Go for maximum performance
 - 📄 **JSON Export** - Machine-readable output for CI/CD integration
 - 🙈 **Gitignore Support** - Automatically respects `.gitignore` patterns to skip irrelevant files
+- 🌍 **Cross-Platform** - Works on Linux, macOS, and Windows
 
 ## 📦 Installation
 
-### Quick Install (Recommended)
+### Quick Install by Platform
+
+#### 🐧 Linux / 🍎 macOS
 
 ```bash
-# Clone or navigate to the secscan directory
+# Navigate to secscan directory
 cd secscan
 
-# Build and install system-wide (requires sudo)
-make install
+# Option 1: Using installation script (recommended)
+./install.sh
+
+# Option 2: Using Make
+make install         # System-wide (requires sudo)
+# OR
+make install-local   # User-only (no sudo)
 ```
 
-This will install `secscan` to `/usr/local/bin/` making it available as a global command.
+#### 🪟 Windows
 
-### Manual Installation
+```powershell
+# Navigate to secscan directory
+cd secscan
 
-```bash
-# Build the binary
-make build
+# Using PowerShell script (recommended)
+.\install.ps1
 
-# Install to /usr/local/bin (requires sudo)
-sudo cp build/secscan /usr/local/bin/
-sudo chmod +x /usr/local/bin/secscan
+# For system-wide installation (requires admin):
+.\install.ps1 -Global
 ```
 
-### Alternative: Local Installation (No sudo required)
+> **Note**: Windows doesn't come with `make` by default. Use the PowerShell script instead.
+
+#### 🌍 Universal Installer (All Platforms)
+
+Works on Linux, macOS, and Windows:
 
 ```bash
-# Build the binary
-make build
-
-# Copy to local bin directory (ensure ~/.local/bin is in your PATH)
-mkdir -p ~/.local/bin
-cp build/secscan ~/.local/bin/
-chmod +x ~/.local/bin/secscan
-
-# Add to PATH if not already (add this to your ~/.bashrc or ~/.zshrc)
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-### Using Go Install
-
-```bash
-go install github.com/Zayan-Mohamed/secscan@latest
+cd secscan
+go run installer/install.go
 ```
 
 ### Verify Installation

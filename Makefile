@@ -1,4 +1,9 @@
 # SecScan Makefile
+# 
+# NOTE: This Makefile is designed for Linux/macOS systems.
+# Windows users should use install.ps1 instead, or the universal installer: go run installer/install.go
+# 
+# The install/install-local targets use Unix-specific paths and commands.
 
 # Variables
 BINARY_NAME=secscan
@@ -23,6 +28,10 @@ LDFLAGS=-ldflags "-X main.Version=$(VERSION) -s -w"
 help:
 	@echo "SecScan v$(VERSION) - Makefile Commands"
 	@echo ""
+	@echo "⚠️  IMPORTANT: This Makefile is for Linux/macOS only"
+	@echo "   Windows users should use: install.ps1"
+	@echo "   Or use the universal installer: go run installer/install.go"
+	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "⚡ Quick Start:"
@@ -34,6 +43,9 @@ help:
 
 ## all: Build for all platforms
 all: clean build-linux build-darwin build-windows
+
+## build-all: Build for all platforms (alias for all)
+build-all: all
 
 ## build: Build for current platform
 build:

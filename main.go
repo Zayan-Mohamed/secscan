@@ -1,5 +1,5 @@
 // secscan - Enhanced Go CLI secret scanner
-// Version: 2.2.0
+// Version: 2.2.1
 // Author: Zayan-Mohamed (itsm.zayan@gmail.com)
 // License: MIT
 //
@@ -38,6 +38,9 @@ import (
 	"time"
 	"unicode/utf8"
 )
+
+// Version information
+const version = "2.2.1"
 
 // Finding represents a detected secret or potential secret
 type Finding struct {
@@ -946,14 +949,15 @@ func main() {
 	configFile := flag.String("config", "", "path to custom config file (optional)")
 	entropyThreshold := flag.Float64("entropy", 5.0, "entropy threshold for detection (default 5.0)")
 	noEntropy := flag.Bool("no-entropy", false, "disable entropy-based detection")
-	version := flag.Bool("version", false, "show version information")
+	showVersion := flag.Bool("version", false, "show version information")
 	respectGitignore := flag.Bool("respect-gitignore", true, "respect .gitignore files when scanning (default: true)")
 
 	flag.Parse()
 
-	if *version {
-		fmt.Println("secscan version 2.2.0")
+	if *showVersion {
+		fmt.Printf("secscan version %s\n", version)
 		fmt.Println("Enhanced secret scanner for source code")
+		fmt.Println("https://github.com/Zayan-Mohamed/secscan")
 		os.Exit(0)
 	}
 
