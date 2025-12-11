@@ -96,25 +96,25 @@ download_binary() {
     local download_url="https://github.com/Zayan-Mohamed/secscan/releases/download/v${VERSION}/${binary_name}"
     local temp_file="/tmp/secscan-${PLATFORM}"
     
-    print_info "Downloading SecScan v${VERSION} for ${PLATFORM}..."
+    print_info "Downloading SecScan v${VERSION} for ${PLATFORM}..." >&2
     
     if command -v curl &> /dev/null; then
         curl -fsSL -o "$temp_file" "$download_url" || {
-            print_error "Failed to download binary"
+            print_error "Failed to download binary" >&2
             exit 1
         }
     elif command -v wget &> /dev/null; then
         wget -q -O "$temp_file" "$download_url" || {
-            print_error "Failed to download binary"
+            print_error "Failed to download binary" >&2
             exit 1
         }
     else
-        print_error "Neither curl nor wget found"
-        print_info "Please install curl or wget and try again"
+        print_error "Neither curl nor wget found" >&2
+        print_info "Please install curl or wget and try again" >&2
         exit 1
     fi
     
-    print_success "Downloaded binary"
+    print_success "Downloaded binary" >&2
     echo "$temp_file"
 }
 
