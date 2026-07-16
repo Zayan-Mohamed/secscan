@@ -136,7 +136,7 @@ func TestIsHighEntropy(t *testing.T) {
 		// though it is a fixture -- which is the same false positive this
 		// release fixes in secscan, where an anchored allowlist missed AWS's
 		// own AKIAIOSFODNN7EXAMPLE and the scanner flagged its own tests.
-		{"github pat", "ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8", defaultEntropy, true},
+		{"github pat", "ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8", defaultEntropy, true}, // secscan:ignore
 		{"opaque service key", "vault_k3Qm9RtZ2xPwL7bNcF4hJ8sVyD6g", defaultEntropy, true},
 
 		// Long base64 blobs are embedded assets, not secrets. These were the
@@ -180,7 +180,7 @@ func TestHerokuRequiresContext(t *testing.T) {
 	if rule.Pattern.MatchString(`INSERT INTO users VALUES ('550e8400-e29b-41d4-a716-446655440000', 'john')`) {
 		t.Error("a bare UUID in a SQL fixture must not be reported as a Heroku key")
 	}
-	if !rule.Pattern.MatchString(`HEROKU_API_KEY="550e8400-e29b-41d4-a716-446655440000"`) {
+	if !rule.Pattern.MatchString(`HEROKU_API_KEY="550e8400-e29b-41d4-a716-446655440000"`) { // secscan:ignore
 		t.Error("a UUID named as a Heroku key should still be reported")
 	}
 }
@@ -205,7 +205,7 @@ func TestExampleCredentialsAllowed(t *testing.T) {
 		}
 	}
 
-	if isAllowed("AKIAI44QH8DHBEXMPLZZ", allow) {
+	if isAllowed("AKIAI44QH8DHBEXMPLZZ", allow) { // secscan:ignore
 		t.Error("a credential-shaped value without an example marker must not be allowlisted")
 	}
 }
@@ -221,10 +221,10 @@ func TestAllowlistDoesNotSuppressRealCredentials(t *testing.T) {
 	}
 
 	realKeys := []string{
-		"AIzaSyCdmy-K7the_9tSrke72PouQMnMX-a7eZS", // contains "my-" and "the_"
-		"ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8",
+		"AIzaSyCdmy-K7the_9tSrke72PouQMnMX-a7eZS",  // contains "my-" and "the_" // secscan:ignore
+		"ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8", // secscan:ignore
 		"vault_k3Qm9RtZ2xPwL7bNcF4hJ8sVyD6g",
-		"AKIAI44QH8DHBEXMPLZZ",
+		"AKIAI44QH8DHBEXMPLZZ", // secscan:ignore
 	}
 
 	for _, k := range realKeys {
@@ -248,7 +248,7 @@ func TestEntropyTokenizerSplitsStructuredText(t *testing.T) {
 	}
 
 	// A real token must survive tokenising intact.
-	const pat = "ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+	const pat = "ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8" // secscan:ignore
 	if toks := entropyTokens.FindAllString(`token = "`+pat+`"`, -1); len(toks) == 0 || toks[0] != pat {
 		t.Errorf("tokenizer mangled a real credential: got %v, want [%q]", toks, pat)
 	}
@@ -269,7 +269,7 @@ func TestEntropyRequiresSecretContext(t *testing.T) {
 	}
 	config := &Config{AllowPatterns: allow, EntropyThreshold: defaultEntropy}
 
-	const tok = "ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
+	const tok = "ghp_a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8" // secscan:ignore
 
 	if got := scanLine(`const apiToken = "`+tok+`"`, "a.go", 1, rules, config); len(got) == 0 {
 		t.Error("a high-entropy token on a line that names it a token should be reported")
@@ -361,7 +361,7 @@ func TestGenerateHash(t *testing.T) {
 // TestDeduplicateCollapsesSameSecret pins the documented promise that
 // duplicate findings are removed across commits.
 func TestDeduplicateCollapsesSameSecret(t *testing.T) {
-	const secret = "AKIAI44QH8DHBTESTKEY"
+	const secret = "AKIAI44QH8DHBTESTKEY" // secscan:ignore
 	h := generateHash("aws_access_key", secret)
 
 	// One secret, seen in the working tree and in three separate commits.
@@ -384,7 +384,7 @@ func TestDeduplicateCollapsesSameSecret(t *testing.T) {
 // TestDeduplicatePrefersActionableLocation checks that when a secret is live in
 // the working tree we report it there, not at some historical commit.
 func TestDeduplicatePrefersActionableLocation(t *testing.T) {
-	const secret = "AKIAI44QH8DHBTESTKEY"
+	const secret = "AKIAI44QH8DHBTESTKEY" // secscan:ignore
 	h := generateHash("aws_access_key", secret)
 
 	got := deduplicateFindings([]Finding{
@@ -460,7 +460,7 @@ func TestScanGitHistoryHonoursRoot(t *testing.T) {
 	run("config", "user.email", "t@example.com")
 	run("config", "user.name", "t")
 
-	const secret = "AKIAI44QH8DHBTESTKEY"
+	const secret = "AKIAI44QH8DHBTESTKEY" // secscan:ignore
 	if err := os.WriteFile(filepath.Join(repo, "leak.js"),
 		[]byte("const k = \""+secret+"\"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -504,6 +504,65 @@ func TestScanGitHistoryHonoursRoot(t *testing.T) {
 	}
 	if !found {
 		t.Error("the committed secret was not found in history")
+	}
+}
+
+// TestIgnoreDirective pins the per-line opt-out.
+//
+// A secret scanner's own tests must contain realistic, non-allowlisted
+// credentials to prove real ones are not suppressed, so scanning this repo
+// reported five of its own fixtures at confidence 0.9. Widening the allowlist
+// to cover them would have created silent false negatives -- the one failure
+// mode worse than noise. An explicit directive says "I know what this is"
+// without weakening detection anywhere else.
+func TestIgnoreDirective(t *testing.T) {
+	rules, err := compileRules(defaultRegexps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allow, err := compileAllowPatterns(defaultAllowPatterns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := &Config{AllowPatterns: allow, EntropyThreshold: defaultEntropy}
+
+	line := "key := " + `"AKIAI44QH8DHBEXMPLZZ"` // secscan:ignore
+
+	if got := scanLine(line, "a.go", 1, rules, config); len(got) == 0 {
+		t.Fatal("the fixture must be reported without a directive, or this test proves nothing")
+	}
+	if got := scanLine(line+" // secscan:ignore", "a.go", 1, rules, config); len(got) != 0 {
+		t.Errorf("a line marked secscan:ignore must not be reported, got %d findings", len(got))
+	}
+	if got := scanLine(line+" // secscan: ignore", "a.go", 1, rules, config); len(got) != 0 {
+		t.Error("the directive should tolerate a space after the colon")
+	}
+}
+
+// TestIsExcluded pins .secscanignore matching.
+func TestIsExcluded(t *testing.T) {
+	globs := []string{"main_test.go", "docs/*", "testdata/"}
+
+	for _, path := range []string{
+		"main_test.go",
+		"/abs/path/to/main_test.go",
+		"docs/quickstart.md",
+		"testdata/fixtures.json",
+		"a/b/testdata/keys.txt",
+	} {
+		if !isExcluded(path, globs) {
+			t.Errorf("%q should be excluded", path)
+		}
+	}
+
+	for _, path := range []string{"main.go", "src/app.go", "documentation.md"} {
+		if isExcluded(path, globs) {
+			t.Errorf("%q must not be excluded", path)
+		}
+	}
+
+	if isExcluded("main_test.go", nil) {
+		t.Error("nothing should be excluded when no ignore file is present")
 	}
 }
 

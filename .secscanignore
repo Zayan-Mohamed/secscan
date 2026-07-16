@@ -1,0 +1,13 @@
+# Paths that are deliberately credential-shaped.
+#
+# A secret scanner's tests have to contain realistic, non-allowlisted
+# credentials to prove that real ones are not suppressed -- so scanning this
+# repository reported its own fixtures at confidence 0.9. Widening the allow
+# patterns to cover them would create silent false negatives, which is the one
+# failure mode worse than noise.
+#
+# A per-line secscan:ignore directive covers the working tree, but history keeps
+# the version of the line from before the directive existed, and rewriting
+# published history to quiet a scanner is a bad trade. This file covers both.
+
+main_test.go

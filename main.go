@@ -1,5 +1,5 @@
 // secscan - Enhanced Go CLI secret scanner
-// Version: 2.2.3
+// Version: 2.2.4
 // Author: Zayan-Mohamed (itsm.zayan@gmail.com)
 // License: MIT
 //
@@ -47,7 +47,7 @@ import (
 const maxDiffLineBytes = 4 * 1024 * 1024
 
 // Version information
-const version = "2.2.3"
+const version = "2.2.4"
 
 // Finding represents a detected secret or potential secret
 type Finding struct {
@@ -76,6 +76,7 @@ type Config struct {
 	Verbose           bool
 	RespectGitignore  bool
 	GitignorePatterns []GitignorePattern
+	ExcludeGlobs      []string
 }
 
 // GitignorePattern represents a pattern from .gitignore with its base directory
@@ -197,6 +198,18 @@ var defaultSkipDirs = []string{
 	".idea", ".vscode", ".terraform", "*.egg-info", ".nuxt",
 }
 
+// ignoreFileName is a per-repository list of paths that are deliberately
+// credential-shaped: fixture files, documentation with sample keys, and so on.
+// One glob per line, # for comments, matched against the basename or the
+// repo-relative path.
+//
+// A per-line `secscan:ignore` directive cannot help once a line is committed,
+// because history still holds the version without it, and rewriting published
+// history to silence a scanner is a bad trade. A repo-level ignore file covers
+// the working tree and history alike, which is why history findings carry the
+// file they came from.
+const ignoreFileName = ".secscanignore"
+
 // Generated files that are build output rather than source.
 var defaultSkipArtifacts = []string{
 	"search_index.json",                          // MkDocs search index
@@ -210,6 +223,51 @@ var defaultSkipExtensions = []string{
 	".tar", ".gz", ".bz2", ".7z", ".rar", ".exe", ".dll",
 	".so", ".dylib", ".bin", ".db", ".sqlite", ".lock",
 	".min.js", ".min.css", ".map", ".woff", ".woff2", ".ttf", ".eot",
+}
+
+// loadIgnoreFile reads .secscanignore from the scan root. A missing file is
+// not an error; most repositories will not have one.
+func loadIgnoreFile(root string) []string {
+	data, err := os.ReadFile(filepath.Join(root, ignoreFileName))
+	if err != nil {
+		return nil
+	}
+
+	var globs []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		globs = append(globs, line)
+	}
+	return globs
+}
+
+// isExcluded reports whether path matches a .secscanignore glob. It is checked
+// against both the basename and the path itself, so `main_test.go` covers the
+// file wherever it sits and `docs/*` covers a subtree.
+func isExcluded(path string, globs []string) bool {
+	if len(globs) == 0 {
+		return false
+	}
+
+	clean := filepath.ToSlash(path)
+	base := filepath.Base(clean)
+
+	for _, glob := range globs {
+		if ok, _ := filepath.Match(glob, base); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(glob, clean); ok {
+			return true
+		}
+		// A directory prefix such as "testdata/" or "docs/".
+		if strings.HasSuffix(glob, "/") && strings.Contains(clean+"/", glob) {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldSkipDir(d string) bool {
@@ -689,6 +747,12 @@ func walkFiles(root string, config *Config, action func(path string) error) erro
 		if !looksLikeTextFile(path) {
 			return nil
 		}
+		if isExcluded(path, config.ExcludeGlobs) {
+			if config.Verbose {
+				fmt.Printf("Skipping excluded file: %s\n", path)
+			}
+			return nil
+		}
 		return action(path)
 	})
 }
@@ -723,12 +787,28 @@ var secretContext = regexp.MustCompile(`(?i)(secret|token|password|passwd|` +
 	`credential|auth|bearer|client[_\-.]?secret|signing[_\-.]?key|` +
 	`encryption[_\-.]?key|\bsalt\b|passphrase)`)
 
+// ignoreDirective marks a line that is deliberately credential-shaped.
+//
+// Some values cannot be allowlisted by their content without weakening the
+// allowlist for everyone: a scanner's own test suite has to contain realistic,
+// non-allowlisted credentials in order to prove that real ones are not
+// suppressed. Widening the allow patterns to cover them would create silent
+// false negatives, which is the one failure mode worse than noise. An explicit
+// per-line opt-out is the honest way to say "I know what this is".
+//
+//	{"github pat", "ghp_...", true}, // secscan:ignore
+var ignoreDirective = regexp.MustCompile(`(?i)secscan:\s*ignore`)
+
 // scanLine applies every rule plus entropy detection to a single line of
 // content. Both the working-tree scanner and the git-history scanner go
 // through here, so a secret is judged the same way wherever it is found.
 func scanLine(line, file string, lineNo int, rules map[string]*Rule, config *Config) []Finding {
 	trim := strings.TrimSpace(line)
 	if trim == "" {
+		return nil
+	}
+
+	if ignoreDirective.MatchString(line) {
 		return nil
 	}
 
@@ -905,7 +985,8 @@ func scanGitHistory(root string, rules map[string]*Rule, config *Config, stats *
 				if len(parts) >= 4 {
 					// parts[3] is b/filename, the new version of the path.
 					currentFile = strings.TrimPrefix(parts[3], "b/")
-					skipCurrentFile = shouldSkipFile(currentFile)
+					skipCurrentFile = shouldSkipFile(currentFile) ||
+						isExcluded(currentFile, config.ExcludeGlobs)
 
 					if config.Verbose && skipCurrentFile {
 						fmt.Printf("Skipping file in git history: %s (commit: %s)\n", currentFile, c[:8])
@@ -1241,6 +1322,11 @@ func main() {
 		}
 	}
 
+	excludeGlobs := loadIgnoreFile(*root)
+	if len(excludeGlobs) > 0 && !*quiet {
+		fmt.Printf("Loaded %d %s patterns\n", len(excludeGlobs), ignoreFileName)
+	}
+
 	// Create config
 	config := &Config{
 		Rules:             compiled,
@@ -1251,6 +1337,7 @@ func main() {
 		Verbose:           *verbose,
 		RespectGitignore:  *respectGitignore,
 		GitignorePatterns: gitignorePatterns,
+		ExcludeGlobs:      excludeGlobs,
 	}
 
 	if *noEntropy {

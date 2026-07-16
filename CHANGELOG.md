@@ -2,6 +2,40 @@
 
 All notable changes to SecScan will be documented in this file.
 
+## [2.2.4] - 2026-07-17
+
+Scanning secscan's own repository reported 9 findings, 5 of them at confidence
+0.9. All five were its own test fixtures. It now reports 2, neither above 0.7.
+
+This is the false positive v2.2.3 was supposed to fix, in a form the allowlist
+cannot reach. A secret scanner's tests must contain realistic, non-allowlisted
+credentials in order to prove that real ones are not suppressed —
+`TestAllowlistDoesNotSuppressRealCredentials` exists precisely to hold values
+that no allow pattern matches. Widening the allowlist to cover them would
+create silent false negatives, which is the one failure mode worse than noise.
+The answer is an explicit opt-out, not a broader guess.
+
+### Added
+
+- **`.secscanignore`** — a per-repository list of deliberately
+  credential-shaped paths. One glob per line, `#` for comments, matched against
+  the basename or the repo-relative path. It covers git history as well as the
+  working tree, which only works because v2.2.3 made history findings report
+  the file they came from.
+- **`secscan:ignore`** — a per-line directive for a single deliberate case:
+
+  ```go
+  {"github pat", "ghp_...", true}, // secscan:ignore
+  ```
+
+  Use the ignore file for anything already committed. A directive cannot help
+  retroactively, because history keeps the version of the line from before the
+  directive existed, and rewriting published history to quiet a scanner is a
+  bad trade.
+
+- secscan now ships a `.secscanignore` covering its own fixtures, so it comes
+  up clean against itself.
+
 ## [2.2.3] - 2026-07-17
 
 Measured across a 37-repo corpus (1,874 files, 1,362 commits of history) on
