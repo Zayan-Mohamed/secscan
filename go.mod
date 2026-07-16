@@ -1,4 +1,4 @@
-module github.com/Zayan-Mohamed/secscan
+module github.com/Zayan-Mohamed/secscan/v2
 
 go 1.19
 

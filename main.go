@@ -1,5 +1,5 @@
 // secscan - Enhanced Go CLI secret scanner
-// Version: 2.2.2
+// Version: 2.2.3
 // Author: Zayan-Mohamed (itsm.zayan@gmail.com)
 // License: MIT
 //
@@ -13,7 +13,8 @@
 //	secscan -root . -history=false       # scan only current files
 //	secscan -root . -json report.json    # output JSON report
 //	secscan -root . -config .secscan.toml  # use custom config
-//	secscan -root . -entropy 5.5         # adjust entropy threshold
+//	secscan -root . -entropy 4.5         # adjust entropy threshold
+//	secscan -root . -min-confidence 0.8  # only report high-confidence findings
 //	secscan -root . -verbose             # show detailed output
 //	secscan -root . -respect-gitignore=false  # disable gitignore support
 package main
@@ -21,6 +22,7 @@ package main
 import (
 	"bufio"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -33,27 +35,33 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 )
 
+// A single diff line can be very long in generated files; the default scanner
+// buffer would silently truncate the commit rather than scan it.
+const maxDiffLineBytes = 4 * 1024 * 1024
+
 // Version information
-const version = "2.2.2"
+const version = "2.2.3"
 
 // Finding represents a detected secret or potential secret
 type Finding struct {
-	File       string            `json:"file"`
-	Line       int               `json:"line"`
-	Commit     string            `json:"commit,omitempty"`
-	Pattern    string            `json:"pattern"`
-	Excerpt    string            `json:"excerpt"`
-	RawValue   string            `json:"-"` // Not exported to JSON
-	Confidence float64           `json:"confidence"`
-	Verified   bool              `json:"verified"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
-	Hash       string            `json:"hash"` // For deduplication
+	File        string            `json:"file"`
+	Line        int               `json:"line"`
+	Commit      string            `json:"commit,omitempty"`
+	Pattern     string            `json:"pattern"`
+	Excerpt     string            `json:"excerpt"`
+	RawValue    string            `json:"-"` // Not exported to JSON
+	Confidence  float64           `json:"confidence"`
+	Verified    bool              `json:"verified"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Hash        string            `json:"hash"`        // Identity of the secret, for deduplication
+	Occurrences int               `json:"occurrences"` // Times this same secret was seen
 }
 
 // Config holds scanner configuration
@@ -131,15 +139,18 @@ var defaultRegexps = map[string]string{
 	"slack_token":       `xox[baprs]-([0-9a-zA-Z]{10,48})`,
 	"slack_webhook":     `https://hooks\.slack\.com/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+`,
 	"google_api":        `AIza[0-9A-Za-z_\-]{35}`,
-	"heroku_api":        `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
-	"mailgun_api":       `key-[0-9a-zA-Z]{32}`,
-	"paypal_braintree":  `access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}`,
-	"picatic_api":       `sk_live_[0-9a-z]{32}`,
-	"sendgrid_api":      `SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}`,
-	"twilio_api":        `SK[0-9a-fA-F]{32}`,
-	"generic_api_key":   `(?i)(?:key|api[_-]?key|apikey)[\s]*[=:>][\s]*['\"]([a-zA-Z0-9_\-]{20,})['\""]`,
-	"generic_secret":    `(?i)(?:secret|password|passwd|pwd)[\s]*[=:>][\s]*['\"]([a-zA-Z0-9_\-!@#$%^&*]{8,})['\""]`,
-	"db_connection":     `(?i)(postgres|mysql|mongodb|redis)://[^\s'"]+:[^\s'"]+@[^\s'"]+`,
+	// A Heroku API key is a bare UUID, so the UUID shape alone carries no
+	// signal -- it matched every seeded uuid in every fixture and migration.
+	// Require the token to actually be named as a Heroku credential.
+	"heroku_api":       `(?i)heroku[a-z0-9_\-]{0,20}['"\s]*[=:>]['"\s]*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`,
+	"mailgun_api":      `key-[0-9a-zA-Z]{32}`,
+	"paypal_braintree": `access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}`,
+	"picatic_api":      `sk_live_[0-9a-z]{32}`,
+	"sendgrid_api":     `SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}`,
+	"twilio_api":       `SK[0-9a-fA-F]{32}`,
+	"generic_api_key":  `(?i)(?:key|api[_-]?key|apikey)[\s]*[=:>][\s]*['\"]([a-zA-Z0-9_\-]{20,})['\""]`,
+	"generic_secret":   `(?i)(?:secret|password|passwd|pwd)[\s]*[=:>][\s]*['\"]([a-zA-Z0-9_\-!@#$%^&*]{8,})['\""]`,
+	"db_connection":    `(?i)(postgres|mysql|mongodb|redis)://[^\s'"]+:[^\s'"]+@[^\s'"]+`,
 }
 
 // Patterns that should be allowed (common false positives)
@@ -152,6 +163,30 @@ var defaultAllowPatterns = []string{
 	`^[A-Za-z]+\.[A-Za-z]+`,             // Class/module names
 	`(?i)^(test|example|sample|demo|placeholder|your[_-].*|my[_-].*)`, // Test values
 	`^[*]+$`, // Masked secrets
+
+	// Documentation and fixture credentials advertise themselves, but the
+	// marker is usually a suffix or infix rather than a prefix -- an anchored
+	// check never saw them. AWS's own canonical example key,
+	// AKIAIOSFODNN7EXAMPLE, is the case that made secscan flag its own docs
+	// and test fixtures at confidence 0.9.
+	`(?i)example`,
+	`(?i)(dummy|placeholder|redacted|changeme|notreal|fake)`,
+	`(?i)x{8,}`,          // XXXXXXXX-style stand-ins
+	`(?i)^(foo|bar|baz)`, // Canonical filler
+
+	// Fill-me-in placeholders from READMEs and .env templates, e.g.
+	// JWT_SECRET="your-secret-here". These stay anchored on purpose: an
+	// unanchored allow pattern is a silent false negative, because a random
+	// 39-character credential can happily contain the substring "my-" or
+	// "the_". In a secret scanner an over-broad allowlist is far more dangerous
+	// than an over-broad rule -- a false positive is merely annoying, a
+	// suppressed real key is invisible.
+	`(?i)[_\-]here$`,
+	`(?i)^(replace|insert|add)[_\-]?(me|this|your)`,
+
+	// Connection strings whose password is a well-known default are describing
+	// a local compose service, not a credential worth reporting.
+	`(?i)://[^:/@\s]*:(postgres|mysql|root|password|passwd|admin|secret|redis|mongo|dev|test|guest)@`,
 }
 
 // Enhanced skip directories with more comprehensive list
@@ -160,6 +195,12 @@ var defaultSkipDirs = []string{
 	"__pycache__", ".venv", "env", ".env", "vendor", "coverage",
 	".pytest_cache", ".mypy_cache", ".tox", "bin", "obj", ".gradle",
 	".idea", ".vscode", ".terraform", "*.egg-info", ".nuxt",
+}
+
+// Generated files that are build output rather than source.
+var defaultSkipArtifacts = []string{
+	"search_index.json",                          // MkDocs search index
+	"mvnw", "mvnw.cmd", "gradlew", "gradlew.bat", // Build wrappers
 }
 
 // File extensions that should be skipped
@@ -184,14 +225,26 @@ func shouldSkipDir(d string) bool {
 func shouldSkipFile(name string) bool {
 	base := filepath.Base(name)
 
-	// Skip hidden files except specific configs
-	if strings.HasPrefix(base, ".") && base != ".env" && base != ".env.example" {
+	// A committed .env is exactly what we are looking for, so it is scanned
+	// despite being a hidden file. Its templates are the opposite: .env.example
+	// and friends exist to hold placeholders, and reporting them is noise by
+	// construction.
+	if strings.HasPrefix(base, ".env.") || base == ".env.template" {
 		return true
 	}
 
-	ext := strings.ToLower(filepath.Ext(name))
+	// Skip hidden files except specific configs
+	if strings.HasPrefix(base, ".") && base != ".env" {
+		return true
+	}
+
+	// Compare against the whole name, not filepath.Ext: Ext("app.min.js")
+	// returns ".js", so multi-part suffixes like .min.js and .min.css never
+	// matched and minified bundles were scanned as ordinary source -- a large
+	// share of the high-entropy false positives came from exactly those files.
+	lower := strings.ToLower(base)
 	for _, skipExt := range defaultSkipExtensions {
-		if ext == skipExt {
+		if strings.HasSuffix(lower, skipExt) {
 			return true
 		}
 	}
@@ -220,6 +273,18 @@ func shouldSkipFile(name string) bool {
 
 	for _, pattern := range lockFilePatterns {
 		if strings.HasSuffix(base, pattern) || base == pattern {
+			return true
+		}
+	}
+
+	// Generated build artifacts. These are compiled from sources that are
+	// themselves scanned, so reading them again adds no coverage -- only noise.
+	// A committed docs site is the worst case: `git rev-list --all` reaches the
+	// gh-pages branch, and documentation about security is saturated with the
+	// words "key", "token" and "secret", so every long string on every rendered
+	// page looks like a credential in context.
+	for _, artifact := range defaultSkipArtifacts {
+		if base == artifact {
 			return true
 		}
 	}
@@ -463,11 +528,23 @@ func isAllowed(value string, allowPatterns []*regexp.Regexp) bool {
 	return false
 }
 
-// generateHash creates a unique hash for deduplication
-func generateHash(file, pattern, value string) string {
+// generateHash identifies a finding by the secret itself, not by where it was
+// seen. Keying on location (file, or commit SHA) meant the same leaked
+// credential produced a distinct hash in every commit that touched it, so
+// deduplication across commits could never fire.
+func generateHash(pattern, value string) string {
 	h := sha256.New()
-	h.Write([]byte(file + pattern + value))
+	h.Write([]byte(pattern + "\x00" + value))
 	return fmt.Sprintf("%x", h.Sum(nil))[:16]
+}
+
+// atoiOr parses a base-10 int, falling back to def.
+func atoiOr(s string, def int) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
 }
 
 func maskSecret(s string) string {
@@ -494,12 +571,38 @@ func stringExcerpt(line string, a, b int) string {
 	return strings.TrimSpace(line[start:end])
 }
 
-// Improved entropy detection with adjustable threshold
+// Secrets live in a fairly narrow length band. Below minSecretLen there is not
+// enough material to judge; above maxSecretLen we are almost always looking at
+// an embedded asset, a bundled blob, or a base64 payload rather than a
+// credential -- and those were the dominant source of false positives.
+const (
+	minSecretLen = 20
+	maxSecretLen = 100
+
+	// defaultEntropy sits just above log2(16) = 4.0, the ceiling for hex, so
+	// git SHAs and integrity hashes fall out by construction while base64
+	// credentials (which reach ~4.7-5.0 at these lengths) clear it. It must
+	// stay below log2(minSecretLen) = 4.32 or the shortest detectable secret
+	// becomes mathematically undetectable; TestEntropyThresholdIsReachable
+	// enforces that.
+	defaultEntropy = 4.1
+)
+
+// isHighEntropy reports whether s looks like a randomly generated credential.
+//
+// Shannon entropy over a single token's own character distribution is bounded
+// above by log2(len(s)): a 20-character token cannot score above 4.32 no
+// matter how random it is. The old default threshold of 5.0 therefore required
+// a token of at least 32 characters with almost no repeated characters, which
+// no real credential satisfies -- a live AWS key id scores 3.68, a GitHub PAT
+// 4.77, a Stripe key 4.75. The detector could only ever fire on long
+// high-alphabet blobs, i.e. exactly the things that are not secrets.
+//
+// The threshold now sits just above the ceiling for hex (log2(16) = 4.0), so
+// "more random than hex" is the bar, and the length band excludes blobs.
 func isHighEntropy(s string, threshold float64) bool {
 	length := utf8.RuneCountInString(s)
-
-	// Must be at least 20 characters
-	if length < 20 {
+	if length < minSecretLen || length > maxSecretLen {
 		return false
 	}
 
@@ -533,11 +636,7 @@ func isHighEntropy(s string, threshold float64) bool {
 		return false
 	}
 
-	// Calculate Shannon entropy
-	h := shannonEntropy(s)
-
-	// Check against threshold (default 5.0, increased from 4.0)
-	return h > threshold
+	return shannonEntropy(s) > threshold
 }
 
 func shannonEntropy(s string) float64 {
@@ -594,6 +693,116 @@ func walkFiles(root string, config *Config, action func(path string) error) erro
 	})
 }
 
+// entropyTokens extracts candidate secrets: maximal runs in the base64url
+// alphabet, which is what credentials are actually drawn from.
+//
+// This used to be `\S{20,}` -- any run of non-whitespace. That swallowed
+// whole URLs, HTML attributes and code fragments as single "tokens", so
+// `href="../user-guide/examples/#share"` was handed to the entropy check as if
+// it were a candidate credential. Restricting the alphabet drops separators,
+// quotes and punctuation, which splits structured text back into short words
+// while leaving real tokens intact.
+var entropyTokens = regexp.MustCompile(`[A-Za-z0-9_\-]{20,}`)
+
+// secretContext matches lines that name something as a credential.
+//
+// Entropy on its own is not a detector at any threshold. Set it high enough to
+// reject ordinary source and it rejects real credentials too (Shannon entropy
+// over a token's own characters is bounded by log2(len), so a 20-char secret
+// tops out at 4.32); set it low enough to catch them and every minified
+// fragment, URL and base64 chunk in the tree fires. Measured on a 37-repo
+// corpus: a 5.0 threshold found 0 real secrets, and 4.1 produced 15,387
+// findings.
+//
+// What separates a credential from a random-looking token is not its entropy
+// but that somebody named it. Consult entropy only where the line says the
+// value is a secret, and it becomes a useful last-resort detector for
+// credential formats that have no dedicated rule.
+var secretContext = regexp.MustCompile(`(?i)(secret|token|password|passwd|` +
+	`\bpwd\b|api[_\-.]?key|apikey|access[_\-.]?key|private[_\-.]?key|` +
+	`credential|auth|bearer|client[_\-.]?secret|signing[_\-.]?key|` +
+	`encryption[_\-.]?key|\bsalt\b|passphrase)`)
+
+// scanLine applies every rule plus entropy detection to a single line of
+// content. Both the working-tree scanner and the git-history scanner go
+// through here, so a secret is judged the same way wherever it is found.
+func scanLine(line, file string, lineNo int, rules map[string]*Rule, config *Config) []Finding {
+	trim := strings.TrimSpace(line)
+	if trim == "" {
+		return nil
+	}
+
+	// Skip comments (basic detection)
+	if strings.HasPrefix(trim, "//") || strings.HasPrefix(trim, "#") ||
+		strings.HasPrefix(trim, "/*") || strings.HasPrefix(trim, "*") {
+		return nil
+	}
+
+	var findings []Finding
+
+	for name, rule := range rules {
+		if !rule.Enabled {
+			continue
+		}
+
+		loc := rule.Pattern.FindStringSubmatchIndex(line)
+		if loc == nil {
+			continue
+		}
+
+		// Test the allowlist against the captured secret, not the whole match.
+		// Rules like generic_secret match `password="testpass123"` in full, so
+		// checking the match meant anchored allow patterns such as ^test or
+		// ^your[_-] could never fire -- every one of them was dead code, and
+		// obvious placeholders were reported as credentials.
+		rawValue := line[loc[0]:loc[1]]
+		value := rawValue
+		if len(loc) >= 4 && loc[2] >= 0 {
+			value = line[loc[2]:loc[3]]
+		}
+
+		if isAllowed(value, config.AllowPatterns) || isAllowed(rawValue, config.AllowPatterns) {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			File:       file,
+			Line:       lineNo,
+			Pattern:    name,
+			Excerpt:    maskSecret(stringExcerpt(line, loc[0], loc[1])),
+			RawValue:   rawValue,
+			Confidence: rule.Confidence,
+			Hash:       generateHash(name, rawValue),
+		})
+	}
+
+	if config.EntropyThreshold > 0 && secretContext.MatchString(line) {
+		for _, tok := range entropyTokens.FindAllString(line, -1) {
+			// The token that matched the context keyword is the name, not the
+			// value; don't report the identifier as its own secret.
+			if secretContext.MatchString(tok) {
+				continue
+			}
+			if isAllowed(tok, config.AllowPatterns) {
+				continue
+			}
+			if isHighEntropy(tok, config.EntropyThreshold) {
+				findings = append(findings, Finding{
+					File:       file,
+					Line:       lineNo,
+					Pattern:    "high_entropy",
+					Excerpt:    maskSecret(tok),
+					RawValue:   tok,
+					Confidence: 0.6,
+					Hash:       generateHash("high_entropy", tok),
+				})
+			}
+		}
+	}
+
+	return findings
+}
+
 func scanFileForSecrets(path string, rules map[string]*Rule, config *Config) ([]Finding, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -611,74 +820,8 @@ func scanFileForSecrets(path string, rules map[string]*Rule, config *Config) ([]
 			return findings, err
 		}
 		lineNo++
-		trim := strings.TrimSpace(line)
-		if len(trim) == 0 {
-			if err == io.EOF {
-				break
-			}
-			continue
-		}
 
-		// Skip comments (basic detection)
-		if strings.HasPrefix(trim, "//") || strings.HasPrefix(trim, "#") ||
-			strings.HasPrefix(trim, "/*") || strings.HasPrefix(trim, "*") {
-			if err == io.EOF {
-				break
-			}
-			continue
-		}
-
-		// Check regex rules
-		for name, rule := range rules {
-			if !rule.Enabled {
-				continue
-			}
-
-			if loc := rule.Pattern.FindStringIndex(line); loc != nil {
-				excerpt := stringExcerpt(line, loc[0], loc[1])
-				rawValue := line[loc[0]:loc[1]]
-
-				// Check if allowed
-				if isAllowed(rawValue, config.AllowPatterns) {
-					continue
-				}
-
-				findings = append(findings, Finding{
-					File:       path,
-					Line:       lineNo,
-					Pattern:    name,
-					Excerpt:    maskSecret(excerpt),
-					RawValue:   rawValue,
-					Confidence: rule.Confidence,
-					Verified:   false,
-					Hash:       generateHash(path, name, rawValue),
-				})
-			}
-		}
-
-		// Check high entropy tokens
-		if config.EntropyThreshold > 0 {
-			tokens := regexp.MustCompile(`\S{20,}`).FindAllString(line, -1)
-			for _, tok := range tokens {
-				// Skip if allowed
-				if isAllowed(tok, config.AllowPatterns) {
-					continue
-				}
-
-				if isHighEntropy(tok, config.EntropyThreshold) {
-					findings = append(findings, Finding{
-						File:       path,
-						Line:       lineNo,
-						Pattern:    "high_entropy",
-						Excerpt:    maskSecret(tok),
-						RawValue:   tok,
-						Confidence: 0.6,
-						Verified:   false,
-						Hash:       generateHash(path, "high_entropy", tok),
-					})
-				}
-			}
-		}
+		findings = append(findings, scanLine(line, path, lineNo, rules, config)...)
 
 		if err == io.EOF {
 			break
@@ -693,8 +836,17 @@ func gitAvailable() bool {
 	return err == nil
 }
 
-func gitAllCommits() ([]string, error) {
+// isGitRepo reports whether root is inside a git working tree.
+func isGitRepo(root string) bool {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+func gitAllCommits(root string) ([]string, error) {
 	cmd := exec.Command("git", "rev-list", "--all")
+	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git rev-list failed: %w (%s)", err, out)
@@ -703,8 +855,9 @@ func gitAllCommits() ([]string, error) {
 	return lines, nil
 }
 
-func gitShowCommitDiff(commit string) (string, error) {
+func gitShowCommitDiff(root, commit string) (string, error) {
 	cmd := exec.Command("git", "show", "--pretty=", "--unified=0", commit)
+	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git show %s failed: %w", commit, err)
@@ -712,18 +865,24 @@ func gitShowCommitDiff(commit string) (string, error) {
 	return string(out), nil
 }
 
-func scanGitHistory(rules map[string]*Rule, config *Config, stats *Stats) ([]Finding, error) {
+// hunkHeader matches "@@ -12,3 +14,2 @@", capturing the old and new start lines.
+var hunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
+
+func scanGitHistory(root string, rules map[string]*Rule, config *Config, stats *Stats) ([]Finding, error) {
 	if !gitAvailable() {
 		return nil, errors.New("git not available in PATH")
 	}
-	commits, err := gitAllCommits()
+	if !isGitRepo(root) {
+		return nil, fmt.Errorf("%s is not a git repository", root)
+	}
+	commits, err := gitAllCommits(root)
 	if err != nil {
 		return nil, err
 	}
 
 	var results []Finding
 	for _, c := range commits {
-		diff, err := gitShowCommitDiff(c)
+		diff, err := gitShowCommitDiff(root, c)
 		if err != nil {
 			// skip commits that fail
 			continue
@@ -732,22 +891,19 @@ func scanGitHistory(rules map[string]*Rule, config *Config, stats *Stats) ([]Fin
 		stats.incrementCommits()
 
 		s := bufio.NewScanner(strings.NewReader(diff))
-		ln := 0
+		s.Buffer(make([]byte, 0, 64*1024), maxDiffLineBytes)
 		currentFile := ""
 		skipCurrentFile := false
+		oldLine, newLine := 0, 0
 
 		for s.Scan() {
-			ln++
 			line := s.Text()
 
-			// Track which file we're currently processing in the diff
 			// Git diff format: "diff --git a/path/to/file b/path/to/file"
 			if strings.HasPrefix(line, "diff --git") {
-				// Extract filename from diff header
 				parts := strings.Fields(line)
 				if len(parts) >= 4 {
-					// The filename is in parts[2] (a/filename) or parts[3] (b/filename)
-					// We'll use parts[3] (b/filename) as it represents the new version
+					// parts[3] is b/filename, the new version of the path.
 					currentFile = strings.TrimPrefix(parts[3], "b/")
 					skipCurrentFile = shouldSkipFile(currentFile)
 
@@ -758,84 +914,162 @@ func scanGitHistory(rules map[string]*Rule, config *Config, stats *Stats) ([]Fin
 				continue
 			}
 
-			// Skip content if we're in a file that should be skipped
+			// Hunk headers carry the line numbers a finding should point at.
+			if m := hunkHeader.FindStringSubmatch(line); m != nil {
+				oldLine = atoiOr(m[1], 0)
+				newLine = atoiOr(m[2], 0)
+				continue
+			}
+
+			// The ---/+++ path headers are not content.
+			if strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") {
+				continue
+			}
+
+			// Only added or removed lines carry changed content. Track the line
+			// number in whichever version of the file the line belongs to.
+			var lineNo int
+			switch {
+			case strings.HasPrefix(line, "+"):
+				lineNo = newLine
+				newLine++
+			case strings.HasPrefix(line, "-"):
+				lineNo = oldLine
+				oldLine++
+			default:
+				oldLine++
+				newLine++
+				continue
+			}
+
 			if skipCurrentFile {
 				continue
 			}
 
-			// Only scan added or removed lines
-			if !strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "-") {
-				continue
-			}
-
-			// Check regex patterns
-			for name, rule := range rules {
-				if !rule.Enabled {
-					continue
-				}
-
-				if loc := rule.Pattern.FindStringIndex(line); loc != nil {
-					rawValue := line[loc[0]:loc[1]]
-
-					// Check if allowed
-					if isAllowed(rawValue, config.AllowPatterns) {
-						continue
-					}
-
-					results = append(results, Finding{
-						File:       "(git-history)",
-						Line:       ln,
-						Commit:     c,
-						Pattern:    name,
-						Excerpt:    maskSecret(stringExcerpt(line, loc[0], loc[1])),
-						RawValue:   rawValue,
-						Confidence: 0.85,
-						Verified:   false,
-						Hash:       generateHash(c, name, rawValue),
-					})
-				}
-			}
-
-			// Check entropy (with stricter threshold for git history)
-			if config.EntropyThreshold > 0 {
-				toks := regexp.MustCompile(`\S{20,}`).FindAllString(line, -1)
-				for _, t := range toks {
-					// Skip if allowed
-					if isAllowed(t, config.AllowPatterns) {
-						continue
-					}
-
-					// Use higher threshold for git history to reduce noise
-					if isHighEntropy(t, config.EntropyThreshold+0.5) {
-						results = append(results, Finding{
-							File:       "(git-history)",
-							Line:       ln,
-							Commit:     c,
-							Pattern:    "high_entropy",
-							Excerpt:    maskSecret(t),
-							RawValue:   t,
-							Confidence: 0.55,
-							Verified:   false,
-							Hash:       generateHash(c, "high_entropy", t),
-						})
-					}
-				}
+			// Strip the diff marker so the content scans identically to a
+			// working-tree line -- including comment detection.
+			for _, f := range scanLine(line[1:], currentFile, lineNo, rules, config) {
+				f.Commit = c
+				results = append(results, f)
 			}
 		}
 	}
 	return results, nil
 }
 
-// deduplicateFindings removes duplicate findings based on hash
+// isJWTSegment reports whether s is one base64url segment of a JWT -- that is,
+// whether it decodes to a JSON object. The header and payload of every JWT do;
+// random credentials do not.
+func isJWTSegment(s string) bool {
+	if !strings.HasPrefix(s, "eyJ") {
+		return false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(s, "="))
+	if err != nil {
+		return false
+	}
+	var obj map[string]interface{}
+	return json.Unmarshal(raw, &obj) == nil
+}
+
+// jwtClaims decodes the claims payload of a compact-serialized JWT. It does
+// not verify the signature -- we only need to read what the token asserts
+// about itself.
+func jwtClaims(token string) (map[string]interface{}, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) < 2 {
+		return nil, false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil {
+		return nil, false
+	}
+	var claims map[string]interface{}
+	if err := json.Unmarshal(raw, &claims); err != nil {
+		return nil, false
+	}
+	return claims, true
+}
+
+// refineFindings applies structural checks that a regular expression cannot
+// express: it drops matches that are public by design and promotes the ones
+// that can be shown to be sensitive. This is what populates Verified, which
+// until now was written as false on every finding and never revisited.
+func refineFindings(findings []Finding) []Finding {
+	out := findings[:0]
+
+	for _, f := range findings {
+		// A JWT is three base64 segments joined by dots, so the entropy
+		// tokenizer splits one token into three and reports each separately.
+		// A segment that decodes to a JSON object is part of a JWT, and the
+		// dedicated rule already owns the whole token.
+		if f.Pattern == "high_entropy" && isJWTSegment(f.RawValue) {
+			continue
+		}
+
+		// Any rule can surface a JWT -- the dedicated supabase_jwt rule, or the
+		// entropy detector picking the same token out of the same line. Judge
+		// the token by what it is rather than by which rule happened to see it.
+		if strings.HasPrefix(f.RawValue, "eyJ") {
+			claims, ok := jwtClaims(f.RawValue)
+			if !ok {
+				if f.Pattern == "supabase_jwt" {
+					continue // Matched the rule but isn't actually a JWT.
+				}
+				out = append(out, f)
+				continue
+			}
+
+			role, _ := claims["role"].(string)
+			switch role {
+			case "anon":
+				// Supabase anon keys are designed to be shipped to browsers and
+				// are protected by row-level security, not by secrecy. Reporting
+				// one is always a false positive.
+				continue
+			case "service_role":
+				// This one bypasses row-level security entirely.
+				f.Verified = true
+				f.Confidence = 0.99
+				if f.Metadata == nil {
+					f.Metadata = map[string]string{}
+				}
+				f.Metadata["role"] = role
+				f.Metadata["reason"] = "service_role bypasses row-level security"
+			}
+
+			if iss, _ := claims["iss"].(string); iss == "supabase-demo" {
+				// The fixed key from `supabase init`, published in Supabase's docs.
+				continue
+			}
+		}
+
+		out = append(out, f)
+	}
+
+	return out
+}
+
+// deduplicateFindings collapses findings that refer to the same secret. The
+// first occurrence wins and carries a count of everywhere else it was seen.
 func deduplicateFindings(findings []Finding) []Finding {
-	seen := make(map[string]bool)
+	index := make(map[string]int)
 	var unique []Finding
 
 	for _, f := range findings {
-		if !seen[f.Hash] {
-			seen[f.Hash] = true
-			unique = append(unique, f)
+		if i, ok := index[f.Hash]; ok {
+			unique[i].Occurrences++
+			// Prefer to report a secret at a location someone can still act on.
+			if unique[i].Commit != "" && f.Commit == "" {
+				occ := unique[i].Occurrences
+				unique[i] = f
+				unique[i].Occurrences = occ
+			}
+			continue
 		}
+		f.Occurrences = 1
+		index[f.Hash] = len(unique)
+		unique = append(unique, f)
 	}
 
 	return unique
@@ -947,12 +1181,15 @@ func main() {
 	quiet := flag.Bool("quiet", false, "suppress human output (useful for CI)")
 	verbose := flag.Bool("verbose", false, "show detailed output with all findings")
 	configFile := flag.String("config", "", "path to custom config file (optional)")
-	entropyThreshold := flag.Float64("entropy", 5.0, "entropy threshold for detection (default 5.0)")
+	entropyThreshold := flag.Float64("entropy", defaultEntropy, "entropy threshold for detection")
 	noEntropy := flag.Bool("no-entropy", false, "disable entropy-based detection")
 	showVersion := flag.Bool("version", false, "show version information")
 	respectGitignore := flag.Bool("respect-gitignore", true, "respect .gitignore files when scanning (default: true)")
+	minConfidence := flag.Float64("min-confidence", 0, "only report findings at or above this confidence (0-1)")
 
 	flag.Parse()
+
+	historyFailed := false
 
 	if *showVersion {
 		fmt.Printf("secscan version %s\n", version)
@@ -1021,7 +1258,7 @@ func main() {
 	}
 
 	if !*quiet {
-		fmt.Println("SecScan v2.1.0 - Enhanced Secret Scanner")
+		fmt.Printf("SecScan v%s - Enhanced Secret Scanner\n", version)
 		fmt.Printf("Scanning: %s\n", *root)
 		fmt.Printf("Entropy threshold: %.1f\n", config.EntropyThreshold)
 		fmt.Printf("Rules loaded: %d\n", len(compiled))
@@ -1055,17 +1292,33 @@ func main() {
 
 	// Scan git history
 	if *history {
-		gh, err := scanGitHistory(compiled, config, stats)
-		if err == nil && len(gh) > 0 {
+		gh, err := scanGitHistory(*root, compiled, config, stats)
+		if err != nil {
+			// This used to be swallowed whenever it produced no findings, so a
+			// history scan that never ran was indistinguishable from a clean
+			// one. It is the whole point of the tool: say so loudly.
+			fmt.Fprintf(os.Stderr, "Warning: git history scan failed: %v\n", err)
+			historyFailed = true
+		} else if len(gh) > 0 {
 			allFindings = append(allFindings, gh...)
 			stats.incrementFindings(len(gh))
-		} else if err != nil && !*quiet {
-			fmt.Fprintf(os.Stderr, "Warning: git history scan failed: %v\n", err)
 		}
 	}
 
 	// Deduplicate findings
-	uniqueFindings := deduplicateFindings(allFindings)
+	uniqueFindings := refineFindings(allFindings)
+	uniqueFindings = deduplicateFindings(uniqueFindings)
+
+	if *minConfidence > 0 {
+		kept := uniqueFindings[:0]
+		for _, f := range uniqueFindings {
+			if f.Confidence >= *minConfidence {
+				kept = append(kept, f)
+			}
+		}
+		uniqueFindings = kept
+	}
+
 	stats.FindingsUnique = len(uniqueFindings)
 	stats.EndTime = time.Now()
 
@@ -1079,8 +1332,9 @@ func main() {
 				"findings_total":   stats.FindingsTotal,
 				"findings_unique":  stats.FindingsUnique,
 				"scan_duration_ms": stats.EndTime.Sub(stats.StartTime).Milliseconds(),
+				"history_scanned":  *history && !historyFailed,
 			},
-			"version": "2.2.0",
+			"version": version,
 		}
 		b, _ := json.MarshalIndent(output, "", "  ")
 		_ = os.WriteFile(*jsonOut, b, 0644)
@@ -1109,6 +1363,12 @@ func main() {
 	// Exit with error code if secrets found
 	if len(uniqueFindings) > 0 {
 		os.Exit(1)
+	}
+	// "No secrets found" is only meaningful if we actually looked. Exiting 0
+	// after a failed history scan reports a clean bill of health for a scan
+	// that never happened.
+	if historyFailed {
+		os.Exit(2)
 	}
 	os.Exit(0)
 }

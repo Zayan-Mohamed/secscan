@@ -2,6 +2,87 @@
 
 All notable changes to SecScan will be documented in this file.
 
+## [2.2.3] - 2026-07-17
+
+Measured across a 37-repo corpus (1,874 files, 1,362 commits of history) on
+default settings, false positives drop from 475 to 20 with no loss of recall.
+
+### Breaking
+
+- **The module path is now `github.com/Zayan-Mohamed/secscan/v2`.** Go requires
+  a major-version suffix for v2+, and without it every tag from v2.0.0 to
+  v2.2.2 was uninstallable — `go install ...@v2.2.2` failed outright, and
+  `@latest` silently resolved to a pseudo-version of `main`'s tip. Installing a
+  pinned release now works for the first time:
+
+  ```bash
+  go install github.com/Zayan-Mohamed/secscan/v2@latest
+  ```
+
+  The old path without `/v2` no longer resolves.
+
+- `Finding.hash` is now derived from the secret rather than its location, so
+  hashes from earlier versions will not match. Any stored baseline must be
+  regenerated.
+- A history scan that fails now exits 2 instead of 0.
+- The default `-entropy` is 4.1, down from 5.0.
+
+### Fixed
+
+- **`-root` was ignored by the history scanner.** The git helpers ran with no
+  working directory set, so they inherited the process CWD. `secscan -root
+  /repo` — the obvious CI invocation — reported `commits_scanned: 0` and exited
+  0, indistinguishable from a clean scan. Git history scanning, the headline
+  feature, silently did nothing for every CI user.
+- **Entropy detection could not fire on a real credential.** Shannon entropy
+  over a token's own characters is bounded by `log2(len)`, so the 5.0 default
+  silently required a 32+ character token with almost no repeated characters.
+  Real credentials score below it: an AWS key id is 3.68, a GitHub PAT 4.77, a
+  Stripe key 4.75. The detector only ever fired on long high-alphabet blobs —
+  exactly the things that are not secrets. Entropy is now consulted only on
+  lines that name the value as a credential, and candidate tokens are extracted
+  from the base64url alphabet instead of `\S{20,}`, which had been handing whole
+  URLs and HTML attributes to the check as single tokens.
+- **Deduplication across commits could never fire.** The hash mixed in the
+  location — the file path, or the commit SHA in history — so one leaked
+  credential produced a fresh "unique" finding for every commit that touched it.
+  One secret across four commits reported as 4; it now reports as 1, with an
+  occurrence count.
+- **The allowlist was dead code against every `generic_` rule.** Patterns were
+  tested against the whole regex match (`password="testpass123"`) rather than
+  the captured value, so anchored entries like `^test` could never match and
+  placeholders were reported as credentials.
+- **`heroku_api` was a bare UUID regex.** Heroku keys are UUIDs, so the shape
+  alone carried no signal — it matched every seeded uuid in every fixture and
+  SQL migration (99 findings, none real). It now requires the value to be named
+  as a Heroku credential.
+- **SecScan flagged its own test fixtures and documentation.** The allowlist was
+  anchored, so it never matched AWS's canonical `AKIAIOSFODNN7EXAMPLE`.
+- **Supabase anon keys are no longer reported.** They are designed to ship to
+  browsers and are guarded by row-level security; only `service_role` bypasses
+  it. Tokens are now judged by decoding them rather than by which rule matched.
+- **`.min.js` and `.min.css` were never skipped.** `filepath.Ext("app.min.js")`
+  returns `.js`, so the multi-part suffixes never matched and minified bundles
+  were scanned as ordinary source.
+- Three different version strings shipped in one binary: the constant said
+  2.2.2, stdout said v2.1.0, and the JSON report said 2.2.0.
+- History findings now name the file and line they came from. They previously
+  reported `(git-history)` with an offset into the diff, which made 398 of the
+  original 475 findings unactionable.
+- Generated documentation sites are skipped. `git rev-list --all` reaches
+  `gh-pages`, so every published MkDocs site was scanned; one file,
+  `search/search_index.json`, produced 1,376 findings on its own.
+
+### Added
+
+- `-min-confidence` gates reporting by confidence, so CI can fail on severity
+  instead of on any finding at all.
+- `Finding.occurrences` counts how many times the same secret was seen.
+- `stats.history_scanned` reports whether history coverage actually happened, so
+  a scan that skipped it cannot be mistaken for a clean one.
+- `Finding.verified` is now populated — previously it was written `false` on
+  every finding and never revisited.
+
 ## [2.2.2] - 2025-12-12
 
 ### Added

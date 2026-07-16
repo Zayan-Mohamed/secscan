@@ -33,7 +33,7 @@ irm https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/scripts/install
 ### Using Go
 
 ```bash
-go install github.com/Zayan-Mohamed/secscan@latest
+go install github.com/Zayan-Mohamed/secscan/v2@latest
 ```
 
 > 💡 **More installation options**: [See Installation Guide](INSTALL.md)
@@ -123,8 +123,8 @@ secscan -respect-gitignore=true
 # Disable gitignore (scan all files including ignored ones)
 secscan -respect-gitignore=false
 
-# Adjust entropy threshold (higher = fewer false positives)
-secscan -entropy 6.0
+# Adjust entropy threshold (useful range ~4.0-4.8; see Entropy Threshold below)
+secscan -entropy 4.5
 
 # Disable entropy detection entirely
 secscan -no-entropy
@@ -212,16 +212,31 @@ secscan -verbose -respect-gitignore=true
 
 ### Entropy Threshold
 
-The entropy threshold controls how "random" a string must be to be flagged:
+The entropy threshold controls how "random" a string must be to be flagged.
 
-- **Default**: 5.0 (balanced)
-- **Strict**: 6.0+ (fewer false positives)
-- **Lenient**: 4.0-4.5 (more sensitive)
+Entropy is only consulted on lines that name the value as a credential
+(`api_key = "..."`, `token: ...`), and only on tokens 20-100 characters long.
+On its own it is not a usable detector — set it high enough to reject ordinary
+source and it rejects real credentials too; set it low enough to catch them and
+every base64 fragment in the tree fires.
+
+- **Default**: 4.1
+- **Stricter**: 4.5 (fewer, higher-confidence findings)
 - **Disabled**: Use `-no-entropy`
 
+The useful range is narrow, and the ceiling is not a matter of taste. Shannon
+entropy over a token's own characters cannot exceed `log2(len)`, so a 20
+character secret tops out at 4.32 and a 32 character one at 5.00. Real
+credentials land between roughly 4.7 and 4.8 — a GitHub PAT scores 4.77, a
+Stripe key 4.75. A threshold of 5.0 or above is not "strict"; it is
+unreachable, and silently detects nothing. Values above ~4.8 are not useful.
+
+The default sits just above `log2(16) = 4.0`, the ceiling for hex, so git SHAs
+and integrity hashes fall out by construction rather than by luck.
+
 ```bash
-# Strict mode - very high confidence
-secscan -entropy 6.5
+# Stricter - fewer, higher confidence findings
+secscan -entropy 4.5
 
 # Lenient mode - catch more potential secrets
 secscan -entropy 4.0
@@ -234,7 +249,7 @@ secscan -entropy 4.0
 ```
 🔍 SecScan v2.0.0 - Enhanced Secret Scanner
 📂 Scanning: /path/to/project
-⚙️  Entropy threshold: 5.0
+⚙️  Entropy threshold: 4.1
 📋 Rules loaded: 20
 📜 Git history: enabled
 
@@ -413,7 +428,7 @@ jq '.findings | group_by(.pattern) | map({pattern: .[0].pattern, count: length})
 | False Positive Rate  | High (511K findings) | Low (~95% reduction) |
 | Deduplication        | ❌                   | ✅                   |
 | Allowlist Support    | ❌                   | ✅                   |
-| Configurable Entropy | ❌ (fixed 4.0)       | ✅ (default 5.0)     |
+| Configurable Entropy | ❌ (fixed 4.0)       | ✅ (default 4.1)     |
 | Skip Files/Dirs      | Limited              | Comprehensive        |
 | Output Formatting    | Basic                | Rich with colors     |
 | Statistics           | ❌                   | ✅                   |
