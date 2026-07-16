@@ -262,7 +262,7 @@ $newPath = "$oldPath;$env:USERPROFILE\.local\bin"
 If you have Go installed and the repository is public:
 
 ```bash
-go install github.com/Zayan-Mohamed/secscan@latest
+go install github.com/Zayan-Mohamed/secscan/v2@latest
 ```
 
 This will install to:

@@ -20,7 +20,7 @@ The fastest way to install SecScan:
 === "Go Install"
 
     ```bash
-    go install github.com/Zayan-Mohamed/secscan@latest
+    go install github.com/Zayan-Mohamed/secscan/v2@latest
     ```
 
 === "Manual Build"

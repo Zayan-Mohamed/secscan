@@ -68,7 +68,7 @@ source ~/.bashrc  # or ~/.zshrc for zsh users
 If the repository is public and you have Go installed:
 
 ```bash
-go install github.com/Zayan-Mohamed/secscan@latest
+go install github.com/Zayan-Mohamed/secscan/v2@latest
 ```
 
 This installs to `$GOPATH/bin` (usually `~/go/bin`).
