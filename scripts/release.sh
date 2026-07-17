@@ -134,7 +134,7 @@ irm https://raw.githubusercontent.com/Zayan-Mohamed/secscan/main/install.ps1 | i
 
 ### Using Go
 \`\`\`bash
-go install github.com/Zayan-Mohamed/secscan@v${version}
+go install github.com/Zayan-Mohamed/secscan/v2@v${version}
 \`\`\`
 
 ### Manual Download

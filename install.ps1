@@ -11,7 +11,9 @@ param(
     [switch]$Help = $false
 )
 
-$VERSION = "2.2.2"
+# Read the version from source rather than hardcoding it, so the banner can
+# never disagree with the binary it builds.
+$VERSION = (Select-String -Path main.go -Pattern 'const version = "([0-9.]+)"').Matches.Groups[1].Value
 $BINARY_NAME = "secscan.exe"
 $BUILD_DIR = "build"
 
@@ -66,7 +68,7 @@ try {
     }
 
     # Build with version info
-    $ldflags = "-X main.Version=$VERSION -s -w"
+    $ldflags = "-s -w"
     $env:GOOS = "windows"
     $env:GOARCH = "amd64"
     

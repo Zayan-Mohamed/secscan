@@ -18,6 +18,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Tests exercise git-history scanning, which needs real history.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -25,7 +28,35 @@ jobs:
           go-version: ${{ matrix.go }}
 
       - name: Run tests
-        run: go test -v ./...
+        run: go test -v -cover ./...
+
+      - name: Scan secscan with secscan
+        # Dogfood: the tool has to come up clean against its own repo. The
+        # .secscanignore covers the test fixtures; anything else is a
+        # regression. Non-fatal so a finding annotates the run without
+        # blocking the matrix.
+        run: |
+          go build -o secscan${{ runner.os == 'Windows' && '.exe' || '' }} main.go
+          ./secscan${{ runner.os == 'Windows' && '.exe' || '' }} -root . -verbose || true
+        shell: bash
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
 
   build:
     name: Build
@@ -40,7 +71,7 @@ jobs:
         with:
           go-version: "1.19"
 
-      - name: Build
+      - name: Build all platforms
         run: make build-all
 
       - name: Upload artifacts

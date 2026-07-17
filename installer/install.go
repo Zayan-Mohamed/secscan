@@ -5,11 +5,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
 
-const version = "2.2.2"
+// version is read from main.go's const rather than duplicated here, so the
+// installer banner can never disagree with the binary it builds.
+var version = readVersion()
+
+func readVersion() string {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		return "unknown"
+	}
+	m := regexp.MustCompile(`const version = "([0-9.]+)"`).FindSubmatch(src)
+	if m == nil {
+		return "unknown"
+	}
+	return string(m[1])
+}
 
 var (
 	binaryName   = "secscan"
@@ -93,9 +108,9 @@ func buildBinary() (string, error) {
 
 	outputPath := filepath.Join(buildDir, binaryFile)
 
-	// Build command
-	ldflags := fmt.Sprintf("-X main.Version=%s -s -w", version)
-	cmd := exec.Command("go", "build", "-ldflags", ldflags, "-o", outputPath, "main.go")
+	// Build command. The binary carries its version as a source const, so
+	// there is nothing to inject at link time.
+	cmd := exec.Command("go", "build", "-ldflags", "-s -w", "-o", outputPath, "main.go")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

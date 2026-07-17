@@ -4,7 +4,9 @@
 
 set -e
 
-VERSION="2.2.2"
+# Read the version from source rather than hardcoding it, so the banner can
+# never disagree with the binary it builds.
+VERSION="$(grep -oE 'const version = "[0-9.]+"' main.go | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 BINARY_NAME="secscan"
 BUILD_DIR="build"
 
@@ -40,7 +42,7 @@ echo ""
 # Build the binary
 echo "Building ${BINARY_NAME}..."
 mkdir -p "${BUILD_DIR}"
-go build -ldflags "-X main.Version=${VERSION} -s -w" -o "${BUILD_DIR}/${BINARY_NAME}" main.go
+go build -ldflags "-s -w" -o "${BUILD_DIR}/${BINARY_NAME}" main.go
 echo "Build complete"
 echo ""
 
